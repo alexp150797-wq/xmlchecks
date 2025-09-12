@@ -5,6 +5,7 @@ from typing import Dict, List
 import time
 from .crc import compute_crc32
 from .iul_reader import IulEntry, pdf_name_ok_lenient, pdf_name_ok_strict
+from .utils import tri, recommendation
 
 
 RECOMMENDATIONS = {
@@ -17,14 +18,6 @@ RECOMMENDATIONS = {
     "DT_MISMATCH": "Обновите дату/время в ИУЛ или замените файл",
     "PDF_NAME_MISMATCH": "Переименуйте PDF согласно требуемому правилу",
 }
-
-def _tri(v: bool | None) -> str:
-    return "Да" if v is True else "Нет" if v is False else "—"
-
-
-def _recommendation(status: List[str]) -> str | None:
-    recs = [RECOMMENDATIONS.get(s) for s in status if RECOMMENDATIONS.get(s)]
-    return "; ".join(recs) if recs else None
 
 def _fmt_mtime(ts: float) -> str:
     t = time.localtime(ts)
@@ -118,14 +111,14 @@ def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict
             "Дата/время IFC": actual_dt,
             "Размер ИУЛ, байт": (e.size_bytes if e else None),
             "Размер IFC, байт": actual_size,
-            "Имя совпадает": _tri(name_match),
-            "CRC совпадает": _tri(crc_match),
-            "Дата/время совпадает": _tri(dt_match),
-            "Размер совпадает": _tri(size_match),
-            "Имя PDF соответствует правилу": _tri(pdf_name_ok),
+            "Имя совпадает": tri(name_match),
+            "CRC совпадает": tri(crc_match),
+            "Дата/время совпадает": tri(dt_match),
+            "Размер совпадает": tri(size_match),
+            "Имя PDF соответствует правилу": tri(pdf_name_ok),
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
-            "recommendation": _recommendation(status),
+            "recommendation": recommendation(status, RECOMMENDATIONS),
         })
 
     for k, e in iul_map.items():

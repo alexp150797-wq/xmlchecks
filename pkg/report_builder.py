@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 from .crc import compute_crc32
+from .utils import tri, recommendation
 
 
 RECOMMENDATIONS = {
@@ -12,14 +13,6 @@ RECOMMENDATIONS = {
     "CRC_MISMATCH": "Проверьте корректность файлов и пересоздайте CRC",
     "NAME_MISMATCH": "Переименуйте файл или исправьте запись в XML",
 }
-
-def _tri(v: bool | None) -> str:
-    return "Да" if v is True else "Нет" if v is False else "—"
-
-
-def _recommendation(status: List[str]) -> str | None:
-    recs = [RECOMMENDATIONS.get(s) for s in status if RECOMMENDATIONS.get(s)]
-    return "; ".join(recs) if recs else None
 
 def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive: bool=True) -> List[Dict]:
     """
@@ -53,12 +46,14 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
         crc_match = None
         status: List[str] = []
         details: List[str] = []
+        xml_name_from_xml = base if meta else None
 
         if meta is None:
             # пытаемся сопоставить по CRC
             hits = xml_crc_index.get(actual_crc_hex, [])
             if len(hits) == 1:
                 xml_name = hits[0]
+                xml_name_from_xml = xml_name
                 used_xml.add(xml_name if case_sensitive else xml_name.lower())
                 name_match = (xml_name == base)
                 if not name_match:
@@ -88,14 +83,14 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
 
         rows.append({
             "Имя файла": base,
-            "Файл из XML": (base if meta else (hits[0] if 'hits' in locals() and hits else None)),
-            "CRC-32 XML": ((meta.get('crc_hex') or '').upper() if meta else (None)),
+            "Файл из XML": xml_name_from_xml,
+            "CRC-32 XML": ((meta.get('crc_hex') or '').upper() if meta else None),
             "CRC-32 IFC": actual_crc_hex,
-            "Имя совпадает": _tri(name_match),
-            "CRC совпадает": _tri(crc_match),
+            "Имя совпадает": tri(name_match),
+            "CRC совпадает": tri(crc_match),
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
-            "recommendation": _recommendation(status),
+            "recommendation": recommendation(status, RECOMMENDATIONS),
         })
 
     # Лишние записи в XML
