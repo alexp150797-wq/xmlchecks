@@ -23,7 +23,7 @@ except Exception:
     Image = None
 
 CRC_RE  = re.compile(r'CRC[-\s_]*32\s*([0-9A-Fa-f]{8})')
-IFC_RE  = re.compile(r'([^\s]+?\.ifc)', re.IGNORECASE)
+IFC_RE  = re.compile(r'([\w\-. ]+?\.ifc)', re.IGNORECASE)
 DT_RE   = re.compile(r'(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})')
 SIZE_RE = re.compile(r'Размер\s+файла\D*(\d+)', re.IGNORECASE)
 

@@ -25,9 +25,13 @@ def _add_sheet(
     ws = wb.create_sheet(title)
     ws.append(headers)
     for r in rows:
-        ws.append([
-            r.get(h) for h in headers
-        ])
+        row_data = []
+        for h in headers:
+            if h == "Рекомендации":
+                row_data.append(r.get("recommendation"))
+            else:
+                row_data.append(r.get(h))
+        ws.append(row_data)
     style_sheet(ws, left_cols=left_cols, yes_no_cols=yes_no_cols, status_col=status_col)
     autosize(ws)
     apply_borders(ws)
@@ -51,25 +55,25 @@ def write_combined_xlsx(
     if xml_rows:
         stats["xml"] = _add_sheet(
             wb,
-            "XML Report",
+            "XML - IFC",
             XML_HEADERS,
             xml_rows,
             left_cols=(1,2,7,8,9),
             yes_no_cols=("E","F"),
             status_col="G",
-            summary_title="Summary XML",
+            summary_title="Итого XML",
         )
 
     if iul_rows:
         stats["iul"] = _add_sheet(
             wb,
-            "IUL Report",
+            "ИУЛ - IFC",
             IUL_HEADERS,
             iul_rows,
             left_cols=(1,2,3,6,7,16,17),
             yes_no_cols=("J","K","L","M","N"),
             status_col="O",
-            summary_title="Summary IUL",
+            summary_title="Итого ИУЛ",
         )
 
     if pdf_xml_rows:

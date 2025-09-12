@@ -15,3 +15,13 @@ def test_extract_iul_entries_from_pdf(monkeypatch, tmp_path):
     assert e.dt_str == '01.02.2024 12:34'
     assert e.size_bytes == 1234
     assert e.source_pdf == pdf_path.name
+
+
+def test_extract_iul_with_spaces(monkeypatch, tmp_path):
+    pdf_path = tmp_path / 'doc.pdf'
+    pdf_path.write_bytes(b'%PDF-1.4')
+    sample_text = 'CRC-32 ABCDEF12\n1-2024-60_П_ТКР_ОХ.П_Пролетное строение.ifc 01.02.2024 12:34 1234'
+    monkeypatch.setattr('xmlchecks.pkg.iul_reader._extract_text_pypdf2', lambda p: sample_text)
+    monkeypatch.setattr('xmlchecks.pkg.iul_reader._extract_text_ocr', lambda p: '')
+    entries = extract_iul_entries_from_pdf(pdf_path)
+    assert entries[0].basename == '1-2024-60_П_ТКР_ОХ.П_Пролетное строение.ifc'

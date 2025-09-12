@@ -20,7 +20,7 @@ HEADERS = [
 
 def write_xlsx(rows: List[Dict], out_path: Path) -> tuple[int, dict]:
     wb = Workbook()
-    ws = wb.active; ws.title = "XML Report"
+    ws = wb.active; ws.title = "XML - IFC"
 
     ws.append(HEADERS)
     for r in rows:
@@ -40,7 +40,7 @@ def write_xlsx(rows: List[Dict], out_path: Path) -> tuple[int, dict]:
     autosize(ws)
     apply_borders(ws)
 
-    stats = add_summary_sheet(wb, rows)
+    stats = add_summary_sheet(wb, rows, title="Итого XML")
 
     wb.save(out_path)
     exit_code = 0 if stats["errors"] == 0 else 1
