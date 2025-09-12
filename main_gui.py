@@ -18,6 +18,8 @@ from pkg.xlsx_writer import write_xlsx
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_iul import write_xlsx_iul
+from pkg.report_builder_integrity import build_integrity_report
+from pkg.xlsx_writer_integrity import write_xlsx_integrity
 
 APP_TITLE = "IFC CRC Checker — GUI"
 APP_MIN_W, APP_MIN_H = 980, 760
@@ -55,6 +57,7 @@ class App(tk.Tk):
         # Checks: independently
         self.var_check_xml = tk.BooleanVar(value=True)
         self.var_check_iul = tk.BooleanVar(value=True)
+        self.var_check_integrity = tk.BooleanVar(value=False)
 
         # IUL selection
         self.iul_files: list[Path] = []
@@ -94,6 +97,7 @@ class App(tk.Tk):
         ttk.Checkbutton(box, text="XML ↔ IFC", variable=self.var_check_xml).grid(row=0, column=0, sticky="w", padx=8, pady=4)
         ttk.Checkbutton(box, text="ИУЛ (PDF) ↔ IFC", variable=self.var_check_iul).grid(row=0, column=1, sticky="w", padx=8, pady=4)
         ttk.Checkbutton(box, text="Открыть отчёты по завершению", variable=self.var_open_after).grid(row=0, column=2, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(box, text="Проверка наличия PDF и XML", variable=self.var_check_integrity).grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=4)
 
         # XML
         ttk.Label(body, text=f"{EMOJI['xml']} XML:").grid(row=1, column=0, sticky="w", **pad)
@@ -221,7 +225,8 @@ class App(tk.Tk):
 
             check_xml = bool(self.var_check_xml.get())
             check_iul = bool(self.var_check_iul.get())
-            if not (check_xml or check_iul):
+            check_integrity = bool(self.var_check_integrity.get())
+            if not (check_xml or check_iul or check_integrity):
                 self._log(f"{EMOJI['warn']} Ничего не выбрано для проверки.", "warn")
                 return
 
@@ -243,39 +248,18 @@ class App(tk.Tk):
 
             self.progress.start(12)
 
-            # --- XML report ---
-            if check_xml:
+            xml_map = None
+            if check_xml or check_integrity:
                 if not xml or not xml.exists():
                     self._log(f"{EMOJI['err']} [ОШИБКА] XML не указан или не найден.", "err")
-                elif not out_xml:
-                    self._log(f"{EMOJI['err']} [ОШИБКА] Путь для XML-отчёта не указан.", "err")
                 else:
-                    if out_xml.exists() and not self._ask_overwrite(out_xml):
-                        self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись XML-отчёта отменена.")
-                    else:
-                        self._log(f"{EMOJI['xml']} Чтение XML...")
-                        rules = read_rules(Path(__file__).with_name("rules.yaml"))
-                        xml_map = extract_from_xml(xml, rules, case_sensitive=True)
-                        self._log(f"    Записей IFC в XML: {len(xml_map)}")
+                    self._log(f"{EMOJI['xml']} Чтение XML...")
+                    rules = read_rules(Path(__file__).with_name("rules.yaml"))
+                    xml_map = extract_from_xml(xml, rules, case_sensitive=True)
+                    self._log(f"    Записей IFC в XML: {len(xml_map)}")
 
-                        self._log(f"{EMOJI['search']} Сверка по XML...")
-                        rows_xml = build_report(xml_map, files_ifc, case_sensitive=True)
-                        for r in rows_xml:
-                            status = r.get("Статус","")
-                            name = r.get("Имя файла")
-                            if status == "OK":
-                                self._log(f"{EMOJI['ok']} OK(XML) — {name}", "ok")
-                            else:
-                                self._log(f"{EMOJI['err']} {status}(XML) — {name} | {r.get('Подробности','')}", "err")
-
-                        self._log(f"{EMOJI['xlsx']} Формирование XLSX (XML)...")
-                        exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
-                        self._log(f"{EMOJI['stats']} [ИТОГИ XML] Всего: {stats_xml.get('total')} | OK: {stats_xml.get('ok')} | Ошибок: {stats_xml.get('errors')}")
-                        if self.var_open_after.get():
-                            self._open_path(out_xml)
-
-            # --- IUL report ---
-            if check_iul:
+            iul_map = None
+            if check_iul or check_integrity:
                 pdfs = list(self.iul_files)
                 if self.var_iul_dir.get():
                     pdfs_dir = collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get()))
@@ -286,38 +270,81 @@ class App(tk.Tk):
                     if s not in seen:
                         seen.add(s); uniq.append(Path(p))
                 pdfs = uniq
-
                 if not pdfs:
                     self._log(f"{EMOJI['warn']} ИУЛ-проверка включена, но PDF не выбраны/не найдены.", "warn")
+                elif PdfReader is None:
+                    self._log(f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.", "err")
                 else:
-                    out_iul = (out_xml.with_name(out_xml.stem.replace('.xlsx','') + "_iul.xlsx")
-                               if (out_xml and out_xml.suffix.lower()==".xlsx")
-                               else (Path.cwd() / "ifc_crc_report_iul.xlsx"))
-                    if out_iul.exists() and not self._ask_overwrite(out_iul):
-                        self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись IUL-отчёта отменена.")
-                    else:
-                        if PdfReader is None:
-                            self._log(f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.", "err")
+                    self._log(f"{EMOJI['iul']} Чтение ИУЛ (PDF)...")
+                    iul_map = extract_iul_entries(pdfs)
+                    self._log(f"    Извлечено записей из ИУЛ: {len(iul_map)}")
+
+            # --- XML report ---
+            if check_xml and xml_map is not None and out_xml:
+                if out_xml.exists() and not self._ask_overwrite(out_xml):
+                    self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись XML-отчёта отменена.")
+                else:
+                    self._log(f"{EMOJI['search']} Сверка по XML...")
+                    rows_xml = build_report(xml_map, files_ifc, case_sensitive=True)
+                    for r in rows_xml:
+                        status = r.get("Статус","")
+                        name = r.get("Имя файла")
+                        if status == "OK":
+                            self._log(f"{EMOJI['ok']} OK(XML) — {name}", "ok")
                         else:
-                            self._log(f"{EMOJI['iul']} Чтение ИУЛ (PDF)...")
-                            iul_map = extract_iul_entries(pdfs)
-                            self._log(f"    Извлечено записей из ИУЛ: {len(iul_map)}")
+                            self._log(f"{EMOJI['err']} {status}(XML) — {name} | {r.get('Подробности','')}", "err")
 
-                            self._log(f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})")
-                            rows_iul = build_report_iul(iul_map, files_ifc, strict_pdf_name=bool(self.var_pdf_name_strict.get()))
-                            for r in rows_iul:
-                                status = r.get("Статус","")
-                                name = r.get("Имя файла")
-                                if status == "OK":
-                                    self._log(f"{EMOJI['ok']} OK(IUL) — {name}", "ok")
-                                else:
-                                    self._log(f"{EMOJI['err']} {status}(IUL) — {name} | {r.get('Подробности','')}", "err")
+                    self._log(f"{EMOJI['xlsx']} Формирование XLSX (XML)...")
+                    exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
+                    self._log(f"{EMOJI['stats']} [ИТОГИ XML] Всего: {stats_xml.get('total')} | OK: {stats_xml.get('ok')} | Ошибок: {stats_xml.get('errors')}")
+                    if self.var_open_after.get():
+                        self._open_path(out_xml)
 
-                            self._log(f"{EMOJI['xlsx']} Формирование XLSX (IUL)...")
-                            exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
-                            self._log(f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}")
-                            if self.var_open_after.get():
-                                self._open_path(out_iul)
+            # --- IUL report ---
+            if check_iul and iul_map is not None:
+                out_iul = (out_xml.with_name(out_xml.stem.replace('.xlsx','') + "_iul.xlsx")
+                           if (out_xml and out_xml.suffix.lower()==".xlsx")
+                           else (Path.cwd() / "ifc_crc_report_iul.xlsx"))
+                if out_iul.exists() and not self._ask_overwrite(out_iul):
+                    self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись IUL-отчёта отменена.")
+                else:
+                    self._log(f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})")
+                    rows_iul = build_report_iul(iul_map, files_ifc, strict_pdf_name=bool(self.var_pdf_name_strict.get()))
+                    for r in rows_iul:
+                        status = r.get("Статус","")
+                        name = r.get("Имя файла")
+                        if status == "OK":
+                            self._log(f"{EMOJI['ok']} OK(IUL) — {name}", "ok")
+                        else:
+                            self._log(f"{EMOJI['err']} {status}(IUL) — {name} | {r.get('Подробности','')}", "err")
+
+                    self._log(f"{EMOJI['xlsx']} Формирование XLSX (IUL)...")
+                    exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
+                    self._log(f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}")
+                    if self.var_open_after.get():
+                        self._open_path(out_iul)
+
+            # --- Integrity report ---
+            if check_integrity and xml_map is not None and iul_map is not None:
+                out_int = (out_xml.with_name("integrity_report.xlsx") if out_xml else Path.cwd()/"integrity_report.xlsx")
+                if out_int.exists() and not self._ask_overwrite(out_int):
+                    self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись отчёта целостности отменена.")
+                else:
+                    self._log(f"{EMOJI['search']} Проверка наличия PDF и XML...")
+                    rows_int = build_integrity_report(xml_map, iul_map, files_ifc, case_sensitive=True)
+                    for r in rows_int:
+                        status = r.get("Статус","")
+                        name = r.get("IFC") or r.get("PDF") or r.get("XML")
+                        if status == "OK":
+                            self._log(f"{EMOJI['ok']} OK(INTEGRITY) — {name}", "ok")
+                        else:
+                            self._log(f"{EMOJI['err']} {status}(INTEGRITY) — {name} | {r.get('Подробности','')}", "err")
+
+                    self._log(f"{EMOJI['xlsx']} Формирование XLSX (целостность)...")
+                    exit_int, stats_int = write_xlsx_integrity(rows_int, out_int)
+                    self._log(f"{EMOJI['stats']} [ИТОГИ ЦЕЛОСТНОСТЬ] Всего: {stats_int.get('total')} | OK: {stats_int.get('ok')} | Ошибок: {stats_int.get('errors')}")
+                    if self.var_open_after.get():
+                        self._open_path(out_int)
 
             self._log(f"{EMOJI['done']} Готово.", "ok")
 
