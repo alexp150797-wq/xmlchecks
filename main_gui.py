@@ -88,7 +88,8 @@ class App(tk.Tk):
         ttk.Label(header, text="Сверка: XML↔IFC и ИУЛ(PDF)↔IFC → XLSX", style="Header.TLabel").pack(side="left", **pad)
         ttk.Label(header, text="Зелёный — успех, красный — ошибка. Сравнение имён всегда строгое.", style="Small.TLabel").pack(side="right", **pad)
 
-        body = ttk.Frame(self); body.pack(fill="both", expand=True, padx=10, pady=6)
+        body = ttk.Frame(self)
+        body.pack(fill="both", expand=True, padx=10, pady=6)
 
         # What to check
         box = ttk.LabelFrame(body, text="Что проверять")
@@ -126,7 +127,8 @@ class App(tk.Tk):
         ttk.Button(body, text="Сохранить как...", command=self._choose_out).grid(row=4, column=2, **pad)
 
         # Run
-        btns = ttk.Frame(body); btns.grid(row=5, column=0, columnspan=4, sticky="w", **pad)
+        btns = ttk.Frame(body)
+        btns.grid(row=5, column=0, columnspan=4, sticky="w", **pad)
         ttk.Button(btns, text=f"{EMOJI['search']} Сформировать отчёт(ы)", style="Accent.TButton", command=self._run).pack(side="left", padx=6)
         ttk.Button(btns, text="Выход", command=self.destroy).pack(side="left", padx=6)
 
@@ -199,7 +201,8 @@ class App(tk.Tk):
     def _log(self, msg, kind="info"):
         tag = "info" if kind not in ("ok","err","warn") else kind
         self.log.insert("end", msg + "\n", tag)
-        self.log.see("end"); self.update_idletasks()
+        self.log.see("end")
+        self.update_idletasks()
 
     def _progress_reset(self, total: int):
         self._steps_done = 0
@@ -263,11 +266,13 @@ class App(tk.Tk):
                 if self.var_iul_dir.get():
                     pdfs_dir = collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get()))
                     pdfs.extend(pdfs_dir)
-                seen = set(); uniq = []
+                seen = set()
+                uniq = []
                 for p in pdfs:
                     s = str(Path(p).resolve())
                     if s not in seen:
-                        seen.add(s); uniq.append(Path(p))
+                        seen.add(s)
+                        uniq.append(Path(p))
                 pdfs = uniq
 
             total_steps = 0
