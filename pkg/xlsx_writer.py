@@ -21,6 +21,7 @@ HEADERS = [
     "CRC совпадает",
     "Статус",
     "Подробности",
+    "Рекомендация",
 ]
 
 def _autosize(ws):
@@ -47,7 +48,7 @@ def _style(ws):
         c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         c.fill = GRAY
 
-    left_cols = (1,2,7,8)
+    left_cols = (1, 2, 7, 8, 9)
     for row in ws.iter_rows(min_row=2):
         for cell in row:
             if cell.column in left_cols:
@@ -67,7 +68,8 @@ def _style(ws):
 
 def write_xlsx(rows: List[Dict], out_path: Path) -> tuple[int, dict]:
     wb = Workbook()
-    ws = wb.active; ws.title = "XML Report"
+    ws = wb.active
+    ws.title = "XML Report"
 
     ws.append(HEADERS)
     for r in rows:
@@ -80,6 +82,7 @@ def write_xlsx(rows: List[Dict], out_path: Path) -> tuple[int, dict]:
             r.get("CRC совпадает"),
             r.get("Статус"),
             r.get("Подробности"),
+            r.get("Рекомендация"),
         ])
 
     _style(ws)

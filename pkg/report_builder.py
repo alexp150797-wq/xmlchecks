@@ -4,8 +4,19 @@ from pathlib import Path
 from typing import Dict, List, Callable, Optional
 from .crc import compute_crc32
 
+RECOMMENDATIONS = {
+    "ERROR_IFC_EXTRA": "Удалите лишний IFC или добавьте запись в XML",
+    "ERROR_XML_EXTRA": "Проверьте лишнюю запись в XML или добавьте соответствующий IFC",
+    "CRC_MISMATCH": "Проверьте совпадение CRC",
+    "NAME_MISMATCH": "Проверьте имя файла",
+}
+
 def _tri(v: bool | None) -> str:
     return "Да" if v is True else "Нет" if v is False else "—"
+
+def _recommendation(status: List[str]) -> str | None:
+    recs = [RECOMMENDATIONS.get(s) for s in status if RECOMMENDATIONS.get(s)]
+    return "; ".join(recs) if recs else None
 
 def build_report(
     xml_map: Dict[str, dict],
@@ -87,6 +98,7 @@ def build_report(
             "CRC совпадает": _tri(crc_match),
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
+            "Рекомендация": _recommendation(status),
         })
 
         if progress_cb:
@@ -106,6 +118,7 @@ def build_report(
             "CRC совпадает": "—",
             "Статус": "ERROR_XML_EXTRA",
             "Подробности": "Запись в XML есть, соответствующий файл не найден",
+            "Рекомендация": _recommendation(["ERROR_XML_EXTRA"]),
         })
 
     return rows

@@ -45,13 +45,16 @@ def main():
         args.check_xml = True
         args.check_iul = True
 
-    if not args.ifc_dir.exists() or not args.ifc_dir.is_dir():
-        logging.error("Папка с IFC не найдена/не является папкой: %s", args.ifc_dir)
-        return 2
-    ifc_files = collect_ifc_files(args.ifc_dir, recursive=args.recursive_ifc)
-    if not ifc_files:
-        logging.error("В папке не найдено файлов *.ifc")
-        return 2
+    if args.check_xml or args.check_iul:
+        if not args.ifc_dir or not args.ifc_dir.exists() or not args.ifc_dir.is_dir():
+            logging.error("Папка с IFC не найдена/не является папкой: %s", args.ifc_dir)
+            return 2
+        ifc_files = collect_ifc_files(args.ifc_dir, recursive=args.recursive_ifc)
+        if not ifc_files:
+            logging.error("В папке не найдено файлов *.ifc")
+            return 2
+    else:
+        ifc_files = []
 
     # XML
     if args.check_xml:
@@ -67,9 +70,17 @@ def main():
             return 2
         rules = read_rules(Path(__file__).with_name("rules.yaml"))
         xml_map = extract_from_xml(args.xml, rules, case_sensitive=True)
+        rules_pdf = read_rules(Path(__file__).with_name("rules.yaml"))
+        rules_pdf["filter_format"] = "PDF"
+        xml_pdf = extract_from_xml(args.xml, rules_pdf, case_sensitive=True)
         rows_xml = build_report(xml_map, ifc_files, case_sensitive=True)
-        _, stats_xml = write_xlsx(rows_xml, out_xml)
-        logging.info("Готово (XML). Отчёт: %s | Итоги: %s", out_xml, stats_xml)
+        exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
+        logging.info(
+            "Готово (XML). Отчёт: %s | Итоги: %s | Подписей PDF: %s",
+            out_xml,
+            stats_xml,
+            len(xml_pdf),
+        )
 
     # IUL
     if args.check_iul:
