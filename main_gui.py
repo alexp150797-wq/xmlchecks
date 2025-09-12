@@ -50,6 +50,7 @@ class App(tk.Tk):
         self.var_ifc_dir = tk.StringVar()
         self.var_out = tk.StringVar(value=str(Path.cwd() / "ifc_crc_report.xlsx"))
         self.var_recursive_ifc = tk.BooleanVar(value=True)
+        self.var_formats = tk.StringVar()
         self.var_open_after = tk.BooleanVar(value=True)
 
         # Checks: independently
@@ -100,15 +101,18 @@ class App(tk.Tk):
         ttk.Entry(body, textvariable=self.var_xml).grid(row=1, column=1, sticky="ew", **pad)
         ttk.Button(body, text="Файл...", command=self._choose_xml).grid(row=1, column=2, **pad)
 
+        ttk.Label(body, text="Форматы (через запятую):").grid(row=2, column=0, sticky="w", **pad)
+        ttk.Entry(body, textvariable=self.var_formats).grid(row=2, column=1, columnspan=2, sticky="ew", **pad)
+
         # IFC dir
-        ttk.Label(body, text=f"{EMOJI['ifc']} Папка с IFC:").grid(row=2, column=0, sticky="w", **pad)
-        ttk.Entry(body, textvariable=self.var_ifc_dir).grid(row=2, column=1, sticky="ew", **pad)
-        ttk.Button(body, text="Выбрать...", command=self._choose_ifc_dir).grid(row=2, column=2, **pad)
-        ttk.Checkbutton(body, text="Рекурсивно по IFC", variable=self.var_recursive_ifc).grid(row=2, column=3, sticky="w", padx=6)
+        ttk.Label(body, text=f"{EMOJI['ifc']} Папка с IFC:").grid(row=3, column=0, sticky="w", **pad)
+        ttk.Entry(body, textvariable=self.var_ifc_dir).grid(row=3, column=1, sticky="ew", **pad)
+        ttk.Button(body, text="Выбрать...", command=self._choose_ifc_dir).grid(row=3, column=2, **pad)
+        ttk.Checkbutton(body, text="Рекурсивно по IFC", variable=self.var_recursive_ifc).grid(row=3, column=3, sticky="w", padx=6)
 
         # IUL PDFs
         iul_frame = ttk.LabelFrame(body, text="ИУЛ (PDF)")
-        iul_frame.grid(row=3, column=0, columnspan=4, sticky="we", padx=10, pady=6)
+        iul_frame.grid(row=4, column=0, columnspan=4, sticky="we", padx=10, pady=6)
         ttk.Label(iul_frame, text=f"{EMOJI['iul']} Выбор:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
         ttk.Button(iul_frame, text="PDF-файлы...", command=self._choose_iul_files).grid(row=0, column=1, padx=6, pady=4)
         ttk.Button(iul_frame, text="Папка с PDF...", command=self._choose_iul_dir).grid(row=0, column=2, padx=6, pady=4)
@@ -119,22 +123,22 @@ class App(tk.Tk):
         ttk.Button(iul_frame, text="Очистить выбор PDF", command=self._clear_iul).grid(row=1, column=2, padx=6, pady=4)
 
         # Out
-        ttk.Label(body, text=f"{EMOJI['xlsx']} Отчёт (XML):").grid(row=4, column=0, sticky="w", **pad)
-        ttk.Entry(body, textvariable=self.var_out).grid(row=4, column=1, sticky="ew", **pad)
-        ttk.Button(body, text="Сохранить как...", command=self._choose_out).grid(row=4, column=2, **pad)
+        ttk.Label(body, text=f"{EMOJI['xlsx']} Отчёт (XML):").grid(row=5, column=0, sticky="w", **pad)
+        ttk.Entry(body, textvariable=self.var_out).grid(row=5, column=1, sticky="ew", **pad)
+        ttk.Button(body, text="Сохранить как...", command=self._choose_out).grid(row=5, column=2, **pad)
 
         # Run
-        btns = ttk.Frame(body); btns.grid(row=5, column=0, columnspan=4, sticky="w", **pad)
+        btns = ttk.Frame(body); btns.grid(row=6, column=0, columnspan=4, sticky="w", **pad)
         ttk.Button(btns, text=f"{EMOJI['search']} Сформировать отчёт(ы)", style="Accent.TButton", command=self._run).pack(side="left", padx=6)
         ttk.Button(btns, text="Выход", command=self.destroy).pack(side="left", padx=6)
 
         # Progress + log
-        ttk.Separator(body).grid(row=6, column=0, columnspan=4, sticky="ew", padx=10, pady=4)
-        ttk.Label(body, text="Журнал:").grid(row=7, column=0, sticky="w", **pad)
+        ttk.Separator(body).grid(row=7, column=0, columnspan=4, sticky="ew", padx=10, pady=4)
+        ttk.Label(body, text="Журнал:").grid(row=8, column=0, sticky="w", **pad)
         self.progress = ttk.Progressbar(body, mode="indeterminate")
-        self.progress.grid(row=7, column=1, columnspan=3, sticky="ew", padx=10)
+        self.progress.grid(row=8, column=1, columnspan=3, sticky="ew", padx=10)
         self.log = tk.Text(body, height=18, wrap="word")
-        self.log.grid(row=8, column=0, columnspan=4, sticky="nsew", padx=10, pady=(0,10))
+        self.log.grid(row=9, column=0, columnspan=4, sticky="nsew", padx=10, pady=(0,10))
 
         # Log color tags
         self.log.tag_configure("ok", foreground="#0a8a0a")
@@ -143,7 +147,7 @@ class App(tk.Tk):
         self.log.tag_configure("warn", foreground="#9a6a00")
 
         body.columnconfigure(1, weight=1)
-        body.rowconfigure(8, weight=1)
+        body.rowconfigure(9, weight=1)
 
     def _choose_xml(self):
         p = filedialog.askopenfilename(title="Выберите XML", filetypes=[("XML","*.xml"),("Все файлы","*.*")])
@@ -255,6 +259,9 @@ class App(tk.Tk):
                     else:
                         self._log(f"{EMOJI['xml']} Чтение XML...")
                         rules = read_rules(Path(__file__).with_name("rules.yaml"))
+                        if self.var_formats.get().strip():
+                            ff = [s.strip().upper() for s in self.var_formats.get().split(",") if s.strip()]
+                            rules["filter_format"] = ff or None
                         xml_map = extract_from_xml(xml, rules, case_sensitive=True)
                         self._log(f"    Записей IFC в XML: {len(xml_map)}")
 

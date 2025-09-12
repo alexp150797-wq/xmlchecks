@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Iterable
 import xml.etree.ElementTree as ET
 
 try:
@@ -14,8 +14,21 @@ DEFAULT_RULES = {
     "name_tag": "FileName",
     "checksum_tag": "FileChecksum",
     "format_tag": "FileFormat",
-    "filter_format": "IFC",
+    "filter_format": ["IFC"],
 }
+
+def _normalize_formats(value: Any) -> Optional[list[str]]:
+    """Normalize string/list of formats to a list of upper-case strings."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        items = value.split(",")
+    elif isinstance(value, Iterable):
+        items = value
+    else:
+        return None
+    result = [str(x).strip().upper() for x in items if str(x).strip()]
+    return result or None
 
 def read_rules(path: Path) -> Dict[str, Any]:
     rules = DEFAULT_RULES.copy()
@@ -28,6 +41,7 @@ def read_rules(path: Path) -> Dict[str, Any]:
                         rules[k] = data[k]
     except Exception:
         pass
+    rules["filter_format"] = _normalize_formats(rules.get("filter_format"))
     return rules
 
 def _localname(tag: str) -> str:
@@ -53,7 +67,8 @@ def extract_from_xml(xml_path: Path, rules: Dict[str, Any], case_sensitive: bool
     name_tag = (rules.get("name_tag") or DEFAULT_RULES["name_tag"])
     checksum_tag = (rules.get("checksum_tag") or DEFAULT_RULES["checksum_tag"])
     format_tag = (rules.get("format_tag") or DEFAULT_RULES["format_tag"])
-    filter_format = rules.get("filter_format", DEFAULT_RULES["filter_format"])
+    filter_formats = rules.get("filter_format") or DEFAULT_RULES["filter_format"]
+    filter_formats = _normalize_formats(filter_formats)
 
     entries = [e for e in root.iter() if _localname(getattr(e, "tag", "")).lower() == str(entry_tag).lower()]
     result: Dict[str, Dict[str, Any]] = {}
@@ -63,11 +78,12 @@ def extract_from_xml(xml_path: Path, rules: Dict[str, Any], case_sensitive: bool
         if not name:
             continue
         fmt = _find_child_text(e, format_tag)
+        fmt_norm = (fmt or "").strip().upper()
         crc = _find_child_text(e, checksum_tag)
         if crc:
             crc = crc.strip().upper()
 
-        if filter_format and (fmt or "").strip().upper() != str(filter_format).upper():
+        if filter_formats and fmt_norm not in filter_formats:
             continue
 
         key = name if case_sensitive else name.lower()

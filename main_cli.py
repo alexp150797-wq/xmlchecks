@@ -27,6 +27,7 @@ def main():
     # XML
     ap.add_argument("--check-xml", action="store_true", help="Выполнить проверку XML↔IFC")
     ap.add_argument("--xml", type=Path, help="Путь к XML с перечнем IFC")
+    ap.add_argument("--formats", type=str, help="Форматы в XML (через запятую, напр. IFC,PFD)")
 
     # IUL
     ap.add_argument("--check-iul", action="store_true", help="Выполнить проверку ИУЛ(PDF)↔IFC")
@@ -59,6 +60,9 @@ def main():
         if out_xml.exists() and not args.force:
             logging.error("Файл отчёта (XML) уже существует: %s. Запустите с --force для перезаписи.", out_xml); return 2
         rules = read_rules(Path(__file__).with_name("rules.yaml"))
+        if args.formats:
+            ff = [s.strip().upper() for s in args.formats.split(",") if s.strip()]
+            rules["filter_format"] = ff or None
         xml_map = extract_from_xml(args.xml, rules, case_sensitive=True)
         rows_xml = build_report(xml_map, ifc_files, case_sensitive=True)
         exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
