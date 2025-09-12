@@ -14,24 +14,30 @@ from pkg.scanner import collect_ifc_files, collect_pdf_files
 from pkg.report_builder import build_report
 from pkg.xlsx_writer import write_xlsx
 
+from pkg.report_builder_pdf_xml import build_report_pdf_xml
+from pkg.xlsx_writer_pdf_xml import write_xlsx_pdf_xml
+
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_iul import write_xlsx_iul
 
 def main():
-    ap = argparse.ArgumentParser(description="IFC CRC Checker (CLI) — сверка XML↔IFC и/или ИУЛ(PDF)↔IFC с отчётами XLSX")
-    ap.add_argument("--ifc-dir", type=Path, required=True, help="Папка с IFC-файлами")
+    ap = argparse.ArgumentParser(description="IFC CRC Checker (CLI) — сверка XML↔IFC, PDF↔XML и/или ИУЛ(PDF)↔IFC с отчётами XLSX")
+    ap.add_argument("--ifc-dir", type=Path, help="Папка с IFC-файлами")
     ap.add_argument("--recursive-ifc", action="store_true", help="Рекурсивно сканировать подпапки (IFC)")
     ap.add_argument("--out", type=Path, help="Куда сохранить .xlsx (XML), по умолчанию рядом с XML или в CWD")
 
-    # XML
+    # XML↔IFC
     ap.add_argument("--check-xml", action="store_true", help="Выполнить проверку XML↔IFC")
-    ap.add_argument("--xml", type=Path, help="Путь к XML с перечнем IFC")
+    ap.add_argument("--xml", type=Path, help="Путь к XML с перечнем IFC/PDF")
+
+    # PDF↔XML
+    ap.add_argument("--check-pdf-xml", action="store_true", help="Выполнить проверку PDF↔XML")
 
     # IUL
     ap.add_argument("--check-iul", action="store_true", help="Выполнить проверку ИУЛ(PDF)↔IFC")
-    ap.add_argument("--iul", type=Path, nargs="*", help="Пути к ИУЛ (PDF). Можно несколько")
-    ap.add_argument("--iul-dir", type=Path, help="Папка с ИУЛ (PDF)")
+    ap.add_argument("--iul", type=Path, nargs="*", help="Пути к PDF. Можно несколько")
+    ap.add_argument("--iul-dir", type=Path, help="Папка с PDF")
     ap.add_argument("--recursive-pdf", action="store_true", help="Рекурсивно сканировать подпапки (PDF)")
     ap.add_argument("--pdf-name-strict", action="store_true", help="Строгое правило имени PDF (…_УЛ.pdf)")
 
@@ -41,17 +47,21 @@ def main():
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s: %(message)s")
 
-    if not (args.check_xml or args.check_iul):
+    if not (args.check_xml or args.check_iul or args.check_pdf_xml):
         args.check_xml = True
         args.check_iul = True
+        args.check_pdf_xml = True
 
-    if not args.ifc_dir.exists() or not args.ifc_dir.is_dir():
-        logging.error("Папка с IFC не найдена/не является папкой: %s", args.ifc_dir); return 2
-    ifc_files = collect_ifc_files(args.ifc_dir, recursive=args.recursive_ifc)
-    if not ifc_files:
-        logging.error("В папке не найдено файлов *.ifc"); return 2
+    if args.check_xml or args.check_iul:
+        if not args.ifc_dir or not args.ifc_dir.exists() or not args.ifc_dir.is_dir():
+            logging.error("Папка с IFC не найдена/не является папкой: %s", args.ifc_dir); return 2
+        ifc_files = collect_ifc_files(args.ifc_dir, recursive=args.recursive_ifc)
+        if not ifc_files:
+            logging.error("В папке не найдено файлов *.ifc"); return 2
+    else:
+        ifc_files = []
 
-    # XML
+    # XML↔IFC
     if args.check_xml:
         if not args.xml or not args.xml.exists():
             logging.error("Указана проверка XML, но путь к XML не задан или файл не найден."); return 2
@@ -64,13 +74,32 @@ def main():
         exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
         logging.info("Готово (XML). Отчёт: %s | Итоги: %s", out_xml, stats_xml)
 
-    # IUL
-    if args.check_iul:
-        pdfs: list[Path] = []
+    pdfs: list[Path] = []
+    if args.check_iul or args.check_pdf_xml:
         if args.iul:
             pdfs.extend(args.iul)
         if args.iul_dir and args.iul_dir.exists():
             pdfs.extend(collect_pdf_files(args.iul_dir, recursive=args.recursive_pdf))
+        pdfs = sorted({p.resolve() for p in pdfs})
+
+    # PDF↔XML
+    if args.check_pdf_xml:
+        if not args.xml or not args.xml.exists():
+            logging.error("Указана проверка PDF↔XML, но путь к XML не задан или файл не найден."); return 2
+        if not pdfs:
+            logging.error("Указана проверка PDF↔XML, но PDF не заданы/не найдены."); return 2
+        out_pdf = (args.out or args.xml.with_name("pdf_xml_report.xlsx")).with_name("pdf_xml_report.xlsx")
+        if out_pdf.exists() and not args.force:
+            logging.error("Файл отчёта (PDF↔XML) уже существует: %s. Запустите с --force для перезаписи.", out_pdf); return 2
+        rules_pdf = read_rules(Path(__file__).with_name("rules.yaml"))
+        rules_pdf["filter_format"] = "PDF"
+        xml_pdf_map = extract_from_xml(args.xml, rules_pdf, case_sensitive=True)
+        rows_pdf = build_report_pdf_xml(xml_pdf_map, pdfs, case_sensitive=True)
+        exit_pdf, stats_pdf = write_xlsx_pdf_xml(rows_pdf, out_pdf)
+        logging.info("Готово (PDF↔XML). Отчёт: %s | Итоги: %s", out_pdf, stats_pdf)
+
+    # IUL↔IFC
+    if args.check_iul:
         if not pdfs:
             logging.error("Указана проверка ИУЛ, но PDF не заданы/не найдены."); return 2
         if PdfReader is None:
