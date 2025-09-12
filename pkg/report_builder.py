@@ -4,8 +4,22 @@ from pathlib import Path
 from typing import Dict, List
 from .crc import compute_crc32
 
+
+RECOMMENDATIONS = {
+    "OK": "Действий не требуется",
+    "ERROR_IFC_EXTRA": "Удалите лишний файл или добавьте запись в XML",
+    "ERROR_XML_EXTRA": "Удалите лишнюю запись из XML или добавьте соответствующий файл IFC",
+    "CRC_MISMATCH": "Проверьте корректность файлов и пересоздайте CRC",
+    "NAME_MISMATCH": "Переименуйте файл или исправьте запись в XML",
+}
+
 def _tri(v: bool | None) -> str:
     return "Да" if v is True else "Нет" if v is False else "—"
+
+
+def _recommendation(status: List[str]) -> str | None:
+    recs = [RECOMMENDATIONS.get(s) for s in status if RECOMMENDATIONS.get(s)]
+    return "; ".join(recs) if recs else None
 
 def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive: bool=True) -> List[Dict]:
     """
@@ -81,6 +95,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
             "CRC совпадает": _tri(crc_match),
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
+            "recommendation": _recommendation(status),
         })
 
     # Лишние записи в XML
@@ -97,6 +112,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
             "CRC совпадает": "—",
             "Статус": "ERROR_XML_EXTRA",
             "Подробности": "Запись в XML есть, соответствующий файл не найден",
+            "recommendation": RECOMMENDATIONS.get("ERROR_XML_EXTRA"),
         })
 
     return rows
