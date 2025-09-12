@@ -5,6 +5,24 @@ from pathlib import Path
 from typing import List, Dict, Optional
 import re
 
+# OCR configuration
+# Path to tesseract executable (optional)
+TESSERACT_CMD: Optional[str] = None
+# List of languages for OCR, joined with '+' when passed to pytesseract
+OCR_LANGS: List[str] = ["rus", "eng"]
+
+
+def set_tesseract_cmd(path: str) -> None:
+    """Set path to tesseract executable used by pytesseract."""
+    global TESSERACT_CMD
+    TESSERACT_CMD = path
+
+
+def set_ocr_langs(langs: List[str]) -> None:
+    """Set languages for OCR."""
+    global OCR_LANGS
+    OCR_LANGS = langs
+
 try:
     from PyPDF2 import PdfReader  # type: ignore
 except Exception:
@@ -64,7 +82,13 @@ def _extract_text_ocr(pdf_path: Path, dpi: int = 200) -> str:
             mat = fitz.Matrix(dpi/72, dpi/72)
             pix = page.get_pixmap(matrix=mat, alpha=False)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            txt = pytesseract.image_to_string(img, lang="rus+eng")
+            if TESSERACT_CMD:
+                pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+            lang_str = "+".join(OCR_LANGS) if OCR_LANGS else ""
+            if lang_str:
+                txt = pytesseract.image_to_string(img, lang=lang_str)
+            else:
+                txt = pytesseract.image_to_string(img)
             if txt:
                 text_parts.append(txt)
         except Exception:

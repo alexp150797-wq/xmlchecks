@@ -14,7 +14,12 @@ from pkg.scanner import collect_ifc_files, collect_pdf_files
 from pkg.report_builder import build_report
 from pkg.xlsx_writer import write_xlsx
 
-from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
+from pkg.iul_reader import (
+    extract_iul_entries,
+    PdfReader,
+    set_tesseract_cmd,
+    set_ocr_langs,
+)  # type: ignore
 from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_iul import write_xlsx_iul
 
@@ -34,6 +39,12 @@ def main():
     ap.add_argument("--iul-dir", type=Path, help="Папка с ИУЛ (PDF)")
     ap.add_argument("--recursive-pdf", action="store_true", help="Рекурсивно сканировать подпапки (PDF)")
     ap.add_argument("--pdf-name-strict", action="store_true", help="Строгое правило имени PDF (…_УЛ.pdf)")
+    ap.add_argument("--tesseract-path", type=str, help="Путь к исполняемому файлу tesseract")
+    ap.add_argument(
+        "--ocr-lang",
+        default="rus+eng",
+        help="Языки OCR, например 'rus+eng'",
+    )
 
     ap.add_argument("--force", action="store_true", help="Перезаписать отчёты, если файлы уже существуют")
     ap.add_argument("-v", "--verbose", action="store_true", help="Подробные логи")
@@ -82,6 +93,12 @@ def main():
             out_iul = Path.cwd() / "ifc_crc_report_iul.xlsx"
         if out_iul.exists() and not args.force:
             logging.error("Файл отчёта (IUL) уже существует: %s. Запустите с --force для перезаписи.", out_iul); return 2
+
+        if args.tesseract_path:
+            set_tesseract_cmd(args.tesseract_path)
+        if args.ocr_lang:
+            set_ocr_langs([l for l in args.ocr_lang.split("+") if l])
+
         iul_map = extract_iul_entries(pdfs)
         rows_iul = build_report_iul(iul_map, ifc_files, strict_pdf_name=bool(args.pdf_name_strict))
         exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)

@@ -15,7 +15,12 @@ from pkg.scanner import collect_ifc_files, collect_pdf_files
 from pkg.report_builder import build_report
 from pkg.xlsx_writer import write_xlsx
 
-from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
+from pkg.iul_reader import (
+    extract_iul_entries,
+    PdfReader,
+    set_tesseract_cmd,
+    set_ocr_langs,
+)  # type: ignore
 from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_iul import write_xlsx_iul
 
@@ -62,6 +67,8 @@ class App(tk.Tk):
         self.var_iul_dir = tk.StringVar()
         self.var_recursive_pdf = tk.BooleanVar(value=True)
         self.var_pdf_name_strict = tk.BooleanVar(value=False)  # строгое имя PDF (_УЛ)
+        self.var_tesseract_path = tk.StringVar()
+        self.var_ocr_lang = tk.StringVar(value="rus+eng")
 
         self._build_ui()
 
@@ -118,6 +125,15 @@ class App(tk.Tk):
         ttk.Checkbutton(iul_frame, text="Строгое имя PDF (…_УЛ.pdf)", variable=self.var_pdf_name_strict).grid(row=1, column=1, sticky="w", padx=6, pady=4)
         ttk.Button(iul_frame, text="Очистить выбор PDF", command=self._clear_iul).grid(row=1, column=2, padx=6, pady=4)
 
+        ttk.Label(iul_frame, text=f"{EMOJI['path']} Tesseract:").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(iul_frame, textvariable=self.var_tesseract_path).grid(row=2, column=1, columnspan=2, sticky="ew", padx=6, pady=4)
+        ttk.Button(iul_frame, text="Файл...", command=self._choose_tesseract).grid(row=2, column=3, padx=6, pady=4)
+
+        ttk.Label(iul_frame, text="Языки OCR:").grid(row=3, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(iul_frame, textvariable=self.var_ocr_lang).grid(row=3, column=1, columnspan=2, sticky="ew", padx=6, pady=4)
+
+        iul_frame.columnconfigure(1, weight=1)
+
         # Out
         ttk.Label(body, text=f"{EMOJI['xlsx']} Отчёт (XML):").grid(row=4, column=0, sticky="w", **pad)
         ttk.Entry(body, textvariable=self.var_out).grid(row=4, column=1, sticky="ew", **pad)
@@ -170,6 +186,11 @@ class App(tk.Tk):
         if p:
             self.var_iul_dir.set(p)
             self._update_iul_label()
+
+    def _choose_tesseract(self):
+        p = filedialog.askopenfilename(title="Выберите tesseract", filetypes=[("Все файлы","*.*")])
+        if p:
+            self.var_tesseract_path.set(p)
 
     def _clear_iul(self):
         self.iul_files = []
@@ -299,6 +320,10 @@ class App(tk.Tk):
                         if PdfReader is None:
                             self._log(f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.", "err")
                         else:
+                            if self.var_tesseract_path.get():
+                                set_tesseract_cmd(self.var_tesseract_path.get())
+                            if self.var_ocr_lang.get():
+                                set_ocr_langs([l for l in self.var_ocr_lang.get().split("+") if l])
                             self._log(f"{EMOJI['iul']} Чтение ИУЛ (PDF)...")
                             iul_map = extract_iul_entries(pdfs)
                             self._log(f"    Извлечено записей из ИУЛ: {len(iul_map)}")
