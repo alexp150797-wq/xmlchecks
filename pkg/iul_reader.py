@@ -22,10 +22,10 @@ except Exception:
     pytesseract = None
     Image = None
 
-CRC_RE = re.compile(r'CRC[-\s_]*32\s*([0-9A-Fa-f]{8})')
-IFC_RE = re.compile(r'([^\s]+?\.ifc)', re.IGNORECASE)
-DT_RE  = re.compile(r'(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})')
-INT_RE = re.compile(r'(\d{4,})')
+CRC_RE  = re.compile(r'CRC[-\s_]*32\s*([0-9A-Fa-f]{8})')
+IFC_RE  = re.compile(r'([^\s]+?\.ifc)', re.IGNORECASE)
+DT_RE   = re.compile(r'(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})')
+SIZE_RE = re.compile(r'Размер\s+файла\D*(\d+)', re.IGNORECASE)
 
 @dataclass
 class IulEntry:
@@ -97,9 +97,15 @@ def extract_iul_entries_from_pdf(pdf_path: Path) -> List[IulEntry]:
             m_dt = DT_RE.search(ln)
             dt = m_dt.group(1) if m_dt else None
             size = None
-            ints = [int(x) for x in INT_RE.findall(ln)]
-            if ints:
-                size = ints[-1]
+
+            m_size = SIZE_RE.search(ln)
+            if m_size:
+                size = int(m_size.group(1))
+            else:
+                tail = ln[m_ifc.end():]
+                ints = [int(x) for x in re.findall(r"\d+", tail)]
+                if ints:
+                    size = ints[-1]
 
             entries.append(IulEntry(
                 basename=fname, crc_hex=(last_crc or None), dt_str=dt, size_bytes=size,
