@@ -10,10 +10,13 @@ import subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from pkg.xml_reader import read_rules, extract_from_xml
+from pkg.xml_reader import read_rules, extract_from_xml, extract_iul_pdf_pairs
 from pkg.scanner import collect_ifc_files, collect_pdf_files
 from pkg.report_builder import build_report
 from pkg.xlsx_writer import write_xlsx
+
+from pkg.report_builder_pdf_pairs import build_report_pdf_pairs
+from pkg.xlsx_writer_pdf_pairs import write_xlsx_pdf_pairs
 
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
@@ -55,6 +58,7 @@ class App(tk.Tk):
         # Checks: independently
         self.var_check_xml = tk.BooleanVar(value=True)
         self.var_check_iul = tk.BooleanVar(value=True)
+        self.var_check_pdf_pairs = tk.BooleanVar(value=True)
 
         # IUL selection
         self.iul_files: list[Path] = []
@@ -90,10 +94,11 @@ class App(tk.Tk):
 
         # What to check
         box = ttk.LabelFrame(body, text="Что проверять")
-        box.grid(row=0, column=0, columnspan=3, sticky="we", **pad)
+        box.grid(row=0, column=0, columnspan=4, sticky="we", **pad)
         ttk.Checkbutton(box, text="XML ↔ IFC", variable=self.var_check_xml).grid(row=0, column=0, sticky="w", padx=8, pady=4)
         ttk.Checkbutton(box, text="ИУЛ (PDF) ↔ IFC", variable=self.var_check_iul).grid(row=0, column=1, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(box, text="Открыть отчёты по завершению", variable=self.var_open_after).grid(row=0, column=2, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(box, text="ИУЛ PDF ↔ PDF из XML", variable=self.var_check_pdf_pairs).grid(row=0, column=2, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(box, text="Открыть отчёты по завершению", variable=self.var_open_after).grid(row=0, column=3, sticky="w", padx=8, pady=4)
 
         # XML
         ttk.Label(body, text=f"{EMOJI['xml']} XML:").grid(row=1, column=0, sticky="w", **pad)
@@ -221,7 +226,8 @@ class App(tk.Tk):
 
             check_xml = bool(self.var_check_xml.get())
             check_iul = bool(self.var_check_iul.get())
-            if not (check_xml or check_iul):
+            check_pairs = bool(self.var_check_pdf_pairs.get())
+            if not (check_xml or check_iul or check_pairs):
                 self._log(f"{EMOJI['warn']} Ничего не выбрано для проверки.", "warn")
                 return
 
@@ -240,6 +246,19 @@ class App(tk.Tk):
                 self._log(f"{EMOJI['err']} [ОШИБКА] В папке отсутствуют файлы *.ifc", "err")
                 messagebox.showerror("Ошибка", "В папке не найдено файлов *.ifc")
                 return
+
+            pdfs: list[Path] = []
+            if check_iul or check_pairs:
+                pdfs = list(self.iul_files)
+                if self.var_iul_dir.get():
+                    pdfs_dir = collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get()))
+                    pdfs.extend(pdfs_dir)
+                seen = set(); uniq = []
+                for p in pdfs:
+                    s = str(Path(p).resolve())
+                    if s not in seen:
+                        seen.add(s); uniq.append(Path(p))
+                pdfs = uniq
 
             self.progress.start(12)
 
@@ -276,17 +295,6 @@ class App(tk.Tk):
 
             # --- IUL report ---
             if check_iul:
-                pdfs = list(self.iul_files)
-                if self.var_iul_dir.get():
-                    pdfs_dir = collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get()))
-                    pdfs.extend(pdfs_dir)
-                seen = set(); uniq = []
-                for p in pdfs:
-                    s = str(Path(p).resolve())
-                    if s not in seen:
-                        seen.add(s); uniq.append(Path(p))
-                pdfs = uniq
-
                 if not pdfs:
                     self._log(f"{EMOJI['warn']} ИУЛ-проверка включена, но PDF не выбраны/не найдены.", "warn")
                 else:
@@ -318,6 +326,38 @@ class App(tk.Tk):
                             self._log(f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}")
                             if self.var_open_after.get():
                                 self._open_path(out_iul)
+
+            if check_pairs:
+                if not xml or not xml.exists():
+                    self._log(f"{EMOJI['err']} [ОШИБКА] XML не указан или не найден.", "err")
+                elif not pdfs:
+                    self._log(f"{EMOJI['warn']} Проверка PDF-пар включена, но PDF не выбраны/не найдены.", "warn")
+                else:
+                    out_pairs = (out_xml.with_name("pdf_pair_report.xlsx")
+                                 if (out_xml and out_xml.suffix.lower()==".xlsx")
+                                 else (Path.cwd() / "pdf_pair_report.xlsx"))
+                    if out_pairs.exists() and not self._ask_overwrite(out_pairs):
+                        self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись отчёта PDF-пар отменена.")
+                    else:
+                        self._log(f"{EMOJI['xml']} Чтение XML (PDF пары)...")
+                        pairs = extract_iul_pdf_pairs(xml)
+                        self._log(f"    Пара файлов из XML: {len(pairs)}")
+
+                        self._log(f"{EMOJI['search']} Сверка PDF пар...")
+                        rows_pairs = build_report_pdf_pairs(pairs, pdfs)
+                        for r in rows_pairs:
+                            status = r.get("Статус","")
+                            name = r.get("PDF ИУЛ")
+                            if status == "OK":
+                                self._log(f"{EMOJI['ok']} OK(PDF) — {name}", "ok")
+                            else:
+                                self._log(f"{EMOJI['err']} {status}(PDF) — {name} | {r.get('Подробности','')}", "err")
+
+                        self._log(f"{EMOJI['xlsx']} Формирование XLSX (PDF пары)...")
+                        exit_pairs, stats_pairs = write_xlsx_pdf_pairs(rows_pairs, out_pairs)
+                        self._log(f"{EMOJI['stats']} [ИТОГИ PDF] Всего: {stats_pairs.get('total')} | OK: {stats_pairs.get('ok')} | Ошибок: {stats_pairs.get('errors')}")
+                        if self.var_open_after.get():
+                            self._open_path(out_pairs)
 
             self._log(f"{EMOJI['done']} Готово.", "ok")
 

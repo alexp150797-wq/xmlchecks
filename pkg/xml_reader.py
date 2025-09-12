@@ -75,3 +75,41 @@ def extract_from_xml(xml_path: Path, rules: Dict[str, Any], case_sensitive: bool
             result[key] = {"crc_hex": crc, "format": fmt}
 
     return result
+
+def extract_iul_pdf_pairs(xml_path: Path) -> Dict[str, Dict[str, Optional[str]]]:
+    if not xml_path.exists():
+        raise FileNotFoundError(f"XML не найден: {xml_path}")
+    tree = ET.parse(str(xml_path))
+    root = tree.getroot()
+
+    pairs: Dict[str, Dict[str, Optional[str]]] = {}
+
+    for iul in root.iter():
+        if _localname(getattr(iul, "tag", "")).lower() != "iulfile":
+            continue
+        iul_name = _find_child_text(iul, "FileName")
+        if not iul_name:
+            continue
+        iul_crc = _find_child_text(iul, "FileChecksum")
+        if iul_crc:
+            iul_crc = iul_crc.strip().upper()
+
+        base_elem = None
+        for ch in list(iul):
+            if _localname(getattr(ch, "tag", "")).lower() == "file":
+                base_elem = ch
+                break
+        if base_elem is None:
+            continue
+        base_name = _find_child_text(base_elem, "FileName")
+        base_crc = _find_child_text(base_elem, "FileChecksum")
+        if base_crc:
+            base_crc = base_crc.strip().upper()
+
+        pairs[iul_name] = {
+            "iul_crc": iul_crc,
+            "base_name": base_name,
+            "base_crc": base_crc,
+        }
+
+    return pairs
