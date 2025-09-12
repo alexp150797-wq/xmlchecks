@@ -6,8 +6,25 @@ import time
 from .crc import compute_crc32
 from .iul_reader import IulEntry, pdf_name_ok_lenient, pdf_name_ok_strict
 
+
+RECOMMENDATIONS = {
+    "OK": "Действий не требуется",
+    "ERROR_IFC_EXTRA": "Удалите лишний файл или добавьте запись в ИУЛ",
+    "ERROR_IUL_EXTRA": "Удалите лишнюю запись из ИУЛ или добавьте соответствующий файл",
+    "CRC_MISMATCH": "Проверьте корректность файлов и пересоздайте CRC",
+    "NAME_MISMATCH": "Переименуйте файл или обновите запись в ИУЛ",
+    "SIZE_MISMATCH": "Проверьте размер файла и обновите информацию в ИУЛ",
+    "DT_MISMATCH": "Обновите дату/время в ИУЛ или замените файл",
+    "PDF_NAME_MISMATCH": "Переименуйте PDF согласно требуемому правилу",
+}
+
 def _tri(v: bool | None) -> str:
     return "Да" if v is True else "Нет" if v is False else "—"
+
+
+def _recommendation(status: List[str]) -> str | None:
+    recs = [RECOMMENDATIONS.get(s) for s in status if RECOMMENDATIONS.get(s)]
+    return "; ".join(recs) if recs else None
 
 def _fmt_mtime(ts: float) -> str:
     t = time.localtime(ts)
@@ -108,6 +125,7 @@ def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict
             "Имя PDF соответствует правилу": _tri(pdf_name_ok),
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
+            "recommendation": _recommendation(status),
         })
 
     for k, e in iul_map.items():
@@ -130,5 +148,6 @@ def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict
             "Имя PDF соответствует правилу": "—",
             "Статус": "ERROR_IUL_EXTRA",
             "Подробности": "Запись в ИУЛ есть, соответствующий файл не найден",
+            "recommendation": RECOMMENDATIONS.get("ERROR_IUL_EXTRA"),
         })
     return rows

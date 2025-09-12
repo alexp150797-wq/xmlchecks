@@ -29,6 +29,7 @@ HEADERS = [
     "Имя PDF соответствует правилу",
     "Статус",
     "Подробности",
+    "Рекомендации",
 ]
 
 def _autosize(ws):
@@ -55,7 +56,7 @@ def _style(ws):
         c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         c.fill = GRAY
 
-    left_cols = (1,2,3,6,7,16)
+    left_cols = (1,2,3,6,7,16,17)
     for row in ws.iter_rows(min_row=2):
         for cell in row:
             if cell.column in left_cols:
@@ -96,6 +97,7 @@ def write_xlsx_iul(rows: List[Dict], out_path: Path) -> tuple[int, dict]:
             r.get("Имя PDF соответствует правилу"),
             r.get("Статус"),
             r.get("Подробности"),
+            r.get("recommendation"),
         ])
 
     _style(ws)
