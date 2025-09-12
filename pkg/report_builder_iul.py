@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Callable, Optional
 import time
 from .crc import compute_crc32
 from .iul_reader import IulEntry, pdf_name_ok_lenient, pdf_name_ok_strict
@@ -13,7 +13,12 @@ def _fmt_mtime(ts: float) -> str:
     t = time.localtime(ts)
     return f"{t.tm_mday:02d}.{t.tm_mon:02d}.{t.tm_year:04d} {t.tm_hour:02d}:{t.tm_min:02d}"
 
-def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict_pdf_name: bool=False) -> List[Dict]:
+def build_report_iul(
+    iul_map: Dict[str, IulEntry],
+    ifc_files: List[Path],
+    strict_pdf_name: bool = False,
+    progress_cb: Optional[Callable[[], None]] = None,
+) -> List[Dict]:
     rows: List[Dict] = []
     used = set()
 
@@ -109,6 +114,9 @@ def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
         })
+
+        if progress_cb:
+            progress_cb()
 
     for k, e in iul_map.items():
         if k in used:

@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Callable, Optional
 from .crc import compute_crc32
 
 def _tri(v: bool | None) -> str:
     return "Да" if v is True else "Нет" if v is False else "—"
 
-def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive: bool=True) -> List[Dict]:
+def build_report(
+    xml_map: Dict[str, dict],
+    ifc_files: List[Path],
+    case_sensitive: bool = True,
+    progress_cb: Optional[Callable[[], None]] = None,
+) -> List[Dict]:
     """
     Сравнение XML↔IFC:
       - Имя (строгое сравнение)
@@ -82,6 +87,9 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
         })
+
+        if progress_cb:
+            progress_cb()
 
     # Лишние записи в XML
     for name, meta in xml_map.items():

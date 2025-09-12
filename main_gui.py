@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import threading
 
 from pkg.xml_reader import read_rules, extract_from_xml
 from pkg.scanner import collect_ifc_files, collect_pdf_files
@@ -64,6 +65,7 @@ class App(tk.Tk):
         self.var_pdf_name_strict = tk.BooleanVar(value=False)  # строгое имя PDF (_УЛ)
 
         self._build_ui()
+        self._steps_done = 0
 
     def _apply_theme(self):
         self.style = ttk.Style(self)
@@ -131,7 +133,7 @@ class App(tk.Tk):
         # Progress + log
         ttk.Separator(body).grid(row=6, column=0, columnspan=4, sticky="ew", padx=10, pady=4)
         ttk.Label(body, text="Журнал:").grid(row=7, column=0, sticky="w", **pad)
-        self.progress = ttk.Progressbar(body, mode="indeterminate")
+        self.progress = ttk.Progressbar(body, mode="determinate")
         self.progress.grid(row=7, column=1, columnspan=3, sticky="ew", padx=10)
         self.log = tk.Text(body, height=18, wrap="word")
         self.log.grid(row=8, column=0, columnspan=4, sticky="nsew", padx=10, pady=(0,10))
@@ -199,6 +201,17 @@ class App(tk.Tk):
         self.log.insert("end", msg + "\n", tag)
         self.log.see("end"); self.update_idletasks()
 
+    def _progress_reset(self, total: int):
+        self._steps_done = 0
+        def _do_reset():
+            self.progress.configure(maximum=total, value=0, mode="determinate")
+        self.progress.after(0, _do_reset)
+
+    def _progress_step(self):
+        self._steps_done += 1
+        val = self._steps_done
+        self.progress.after(0, lambda v=val: self.progress.configure(value=v))
+
     def _open_path(self, path: Path):
         try:
             if os.name == "nt":
@@ -216,6 +229,9 @@ class App(tk.Tk):
         return messagebox.askyesno("Файл существует", f"Файл:\n{path}\nуже существует.\nЗаменить?")
 
     def _run(self):
+        threading.Thread(target=self._run_checks, daemon=True).start()
+
+    def _run_checks(self):
         try:
             self.log.delete("1.0", "end")
 
@@ -241,7 +257,26 @@ class App(tk.Tk):
                 messagebox.showerror("Ошибка", "В папке не найдено файлов *.ifc")
                 return
 
-            self.progress.start(12)
+            pdfs: list[Path] = []
+            if check_iul:
+                pdfs = list(self.iul_files)
+                if self.var_iul_dir.get():
+                    pdfs_dir = collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get()))
+                    pdfs.extend(pdfs_dir)
+                seen = set(); uniq = []
+                for p in pdfs:
+                    s = str(Path(p).resolve())
+                    if s not in seen:
+                        seen.add(s); uniq.append(Path(p))
+                pdfs = uniq
+
+            total_steps = 0
+            if check_xml:
+                total_steps += len(files_ifc)
+            if check_iul:
+                total_steps += len(pdfs) + len(files_ifc)
+            if total_steps > 0:
+                self._progress_reset(total_steps)
 
             # --- XML report ---
             if check_xml:
@@ -259,9 +294,14 @@ class App(tk.Tk):
                         self._log(f"    Записей IFC в XML: {len(xml_map)}")
 
                         self._log(f"{EMOJI['search']} Сверка по XML...")
-                        rows_xml = build_report(xml_map, files_ifc, case_sensitive=True)
+                        rows_xml = build_report(
+                            xml_map,
+                            files_ifc,
+                            case_sensitive=True,
+                            progress_cb=self._progress_step,
+                        )
                         for r in rows_xml:
-                            status = r.get("Статус","")
+                            status = r.get("Статус", "")
                             name = r.get("Имя файла")
                             if status == "OK":
                                 self._log(f"{EMOJI['ok']} OK(XML) — {name}", "ok")
@@ -270,52 +310,60 @@ class App(tk.Tk):
 
                         self._log(f"{EMOJI['xlsx']} Формирование XLSX (XML)...")
                         exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
-                        self._log(f"{EMOJI['stats']} [ИТОГИ XML] Всего: {stats_xml.get('total')} | OK: {stats_xml.get('ok')} | Ошибок: {stats_xml.get('errors')}")
+                        self._log(
+                            f"{EMOJI['stats']} [ИТОГИ XML] Всего: {stats_xml.get('total')} | OK: {stats_xml.get('ok')} | Ошибок: {stats_xml.get('errors')}"
+                        )
                         if self.var_open_after.get():
                             self._open_path(out_xml)
 
             # --- IUL report ---
             if check_iul:
-                pdfs = list(self.iul_files)
-                if self.var_iul_dir.get():
-                    pdfs_dir = collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get()))
-                    pdfs.extend(pdfs_dir)
-                seen = set(); uniq = []
-                for p in pdfs:
-                    s = str(Path(p).resolve())
-                    if s not in seen:
-                        seen.add(s); uniq.append(Path(p))
-                pdfs = uniq
-
                 if not pdfs:
                     self._log(f"{EMOJI['warn']} ИУЛ-проверка включена, но PDF не выбраны/не найдены.", "warn")
                 else:
-                    out_iul = (out_xml.with_name(out_xml.stem.replace('.xlsx','') + "_iul.xlsx")
-                               if (out_xml and out_xml.suffix.lower()==".xlsx")
-                               else (Path.cwd() / "ifc_crc_report_iul.xlsx"))
+                    out_iul = (
+                        out_xml.with_name(out_xml.stem.replace('.xlsx', '') + "_iul.xlsx")
+                        if (out_xml and out_xml.suffix.lower() == ".xlsx")
+                        else (Path.cwd() / "ifc_crc_report_iul.xlsx")
+                    )
                     if out_iul.exists() and not self._ask_overwrite(out_iul):
                         self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись IUL-отчёта отменена.")
                     else:
                         if PdfReader is None:
-                            self._log(f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.", "err")
+                            self._log(
+                                f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.",
+                                "err",
+                            )
                         else:
                             self._log(f"{EMOJI['iul']} Чтение ИУЛ (PDF)...")
-                            iul_map = extract_iul_entries(pdfs)
+                            iul_map = extract_iul_entries(pdfs, progress_cb=self._progress_step)
                             self._log(f"    Извлечено записей из ИУЛ: {len(iul_map)}")
 
-                            self._log(f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})")
-                            rows_iul = build_report_iul(iul_map, files_ifc, strict_pdf_name=bool(self.var_pdf_name_strict.get()))
+                            self._log(
+                                f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})"
+                            )
+                            rows_iul = build_report_iul(
+                                iul_map,
+                                files_ifc,
+                                strict_pdf_name=bool(self.var_pdf_name_strict.get()),
+                                progress_cb=self._progress_step,
+                            )
                             for r in rows_iul:
-                                status = r.get("Статус","")
+                                status = r.get("Статус", "")
                                 name = r.get("Имя файла")
                                 if status == "OK":
                                     self._log(f"{EMOJI['ok']} OK(IUL) — {name}", "ok")
                                 else:
-                                    self._log(f"{EMOJI['err']} {status}(IUL) — {name} | {r.get('Подробности','')}", "err")
+                                    self._log(
+                                        f"{EMOJI['err']} {status}(IUL) — {name} | {r.get('Подробности','')}",
+                                        "err",
+                                    )
 
                             self._log(f"{EMOJI['xlsx']} Формирование XLSX (IUL)...")
                             exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
-                            self._log(f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}")
+                            self._log(
+                                f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}"
+                            )
                             if self.var_open_after.get():
                                 self._open_path(out_iul)
 
@@ -324,8 +372,7 @@ class App(tk.Tk):
         except Exception as e:
             self._log(f"{EMOJI['err']} [КРИТИЧЕСКАЯ ОШИБКА] {e}", "err")
             messagebox.showerror("Критическая ошибка", str(e))
-        finally:
-            self.progress.stop()
+
 
 if __name__ == "__main__":
     App().mainloop()

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 import re
 
 try:
@@ -107,13 +107,18 @@ def extract_iul_entries_from_pdf(pdf_path: Path) -> List[IulEntry]:
             ))
     return entries
 
-def extract_iul_entries(paths: List[Path]) -> Dict[str, IulEntry]:
+def extract_iul_entries(
+    paths: List[Path],
+    progress_cb: Optional[Callable[[], None]] = None,
+) -> Dict[str, IulEntry]:
     res: Dict[str, IulEntry] = {}
     for p in paths:
         for e in extract_iul_entries_from_pdf(p):
             key = e.basename
             if key not in res:
                 res[key] = e
+        if progress_cb:
+            progress_cb()
     return res
 
 def pdf_name_ok_lenient(ifc_name: str, pdf_name: str) -> bool:
