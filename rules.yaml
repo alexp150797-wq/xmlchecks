@@ -3,4 +3,6 @@ entry_tag: ModelFile
 name_tag: FileName
 checksum_tag: FileChecksum
 format_tag: FileFormat
-filter_format: IFC
+filter_format:
+  - IFC
+  - PDF
