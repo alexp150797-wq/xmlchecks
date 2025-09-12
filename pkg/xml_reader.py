@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import xml.etree.ElementTree as ET
+import logging
 
 try:
     import yaml  # type: ignore
@@ -26,8 +27,8 @@ def read_rules(path: Path) -> Dict[str, Any]:
                 for k in DEFAULT_RULES:
                     if k in data and data[k] is not None:
                         rules[k] = data[k]
-    except Exception:
-        pass
+    except Exception as exc:  # pragma: no cover - logging only
+        logging.warning("Не удалось прочитать правила из %s: %s", path, exc)
     return rules
 
 def _localname(tag: str) -> str:
