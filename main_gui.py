@@ -14,6 +14,7 @@ from pkg.xml_reader import read_rules, extract_from_xml
 from pkg.scanner import collect_ifc_files, collect_pdf_files
 from pkg.report_builder import build_report
 from pkg.xlsx_writer import write_xlsx
+from pkg.xlsx_writer_pdfxml import write_xlsx_pdfxml
 
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
@@ -55,6 +56,7 @@ class App(tk.Tk):
         # Checks: independently
         self.var_check_xml = tk.BooleanVar(value=True)
         self.var_check_iul = tk.BooleanVar(value=True)
+        self.var_check_pdf_xml = tk.BooleanVar(value=True)
 
         # IUL selection
         self.iul_files: list[Path] = []
@@ -90,10 +92,11 @@ class App(tk.Tk):
 
         # What to check
         box = ttk.LabelFrame(body, text="Что проверять")
-        box.grid(row=0, column=0, columnspan=3, sticky="we", **pad)
+        box.grid(row=0, column=0, columnspan=4, sticky="we", **pad)
         ttk.Checkbutton(box, text="XML ↔ IFC", variable=self.var_check_xml).grid(row=0, column=0, sticky="w", padx=8, pady=4)
         ttk.Checkbutton(box, text="ИУЛ (PDF) ↔ IFC", variable=self.var_check_iul).grid(row=0, column=1, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(box, text="Открыть отчёты по завершению", variable=self.var_open_after).grid(row=0, column=2, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(box, text="PDF ↔ XML", variable=self.var_check_pdf_xml).grid(row=0, column=2, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(box, text="Открыть отчёты по завершению", variable=self.var_open_after).grid(row=0, column=3, sticky="w", padx=8, pady=4)
 
         # XML
         ttk.Label(body, text=f"{EMOJI['xml']} XML:").grid(row=1, column=0, sticky="w", **pad)
@@ -221,7 +224,8 @@ class App(tk.Tk):
 
             check_xml = bool(self.var_check_xml.get())
             check_iul = bool(self.var_check_iul.get())
-            if not (check_xml or check_iul):
+            check_pdfxml = bool(self.var_check_pdf_xml.get())
+            if not (check_xml or check_iul or check_pdfxml):
                 self._log(f"{EMOJI['warn']} Ничего не выбрано для проверки.", "warn")
                 return
 
@@ -318,6 +322,47 @@ class App(tk.Tk):
                             self._log(f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}")
                             if self.var_open_after.get():
                                 self._open_path(out_iul)
+
+            # --- PDF ↔ XML report ---
+            if check_pdfxml:
+                if not xml or not xml.exists():
+                    self._log(f"{EMOJI['err']} [ОШИБКА] XML не указан или не найден для PDF↔XML.", "err")
+                else:
+                    out_pdf = (out_xml.with_name(out_xml.stem.replace('.xlsx','') + "_pdfxml.xlsx")
+                               if (out_xml and out_xml.suffix.lower()==".xlsx")
+                               else (Path.cwd() / "ifc_crc_report_pdfxml.xlsx"))
+                    if out_pdf.exists() and not self._ask_overwrite(out_pdf):
+                        self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись PDF↔XML-отчёта отменена.")
+                    else:
+                        self._log(f"{EMOJI['xml']} Чтение SignFile из XML...")
+                        rules_pdf = {
+                            "entry_tag": "SignFile",
+                            "name_tag": "FileName",
+                            "checksum_tag": "FileChecksum",
+                            "format_tag": "FileFormat",
+                            "filter_format": "PDF",
+                        }
+                        pdf_map = extract_from_xml(xml, rules_pdf, case_sensitive=True)
+                        self._log(f"    Записей PDF в XML: {len(pdf_map)}")
+                        pdf_files = collect_pdf_files(xml.parent, recursive=bool(self.var_recursive_pdf.get()))
+                        self._log(f"    Найдено PDF: {len(pdf_files)}")
+
+                        self._log(f"{EMOJI['search']} Сверка PDF↔XML...")
+                        rows_pdf = build_report(pdf_map, pdf_files, case_sensitive=True)
+                        for r in rows_pdf:
+                            r["CRC-32 PDF"] = r.pop("CRC-32 IFC", None)
+                            status = r.get("Статус","")
+                            name = r.get("Имя файла") or r.get("Файл из XML")
+                            if status == "OK":
+                                self._log(f"{EMOJI['ok']} OK(PDF) — {name}", "ok")
+                            else:
+                                self._log(f"{EMOJI['err']} {status}(PDF) — {name} | {r.get('Подробности','')}", "err")
+
+                        self._log(f"{EMOJI['xlsx']} Формирование XLSX (PDF↔XML)...")
+                        exit_pdf, stats_pdf = write_xlsx_pdfxml(rows_pdf, out_pdf)
+                        self._log(f"{EMOJI['stats']} [ИТОГИ PDF↔XML] Всего: {stats_pdf.get('total')} | OK: {stats_pdf.get('ok')} | Ошибок: {stats_pdf.get('errors')}")
+                        if self.var_open_after.get():
+                            self._open_path(out_pdf)
 
             self._log(f"{EMOJI['done']} Готово.", "ok")
 

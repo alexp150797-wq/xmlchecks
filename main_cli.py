@@ -13,20 +13,24 @@ from pkg.xml_reader import read_rules, extract_from_xml
 from pkg.scanner import collect_ifc_files, collect_pdf_files
 from pkg.report_builder import build_report
 from pkg.xlsx_writer import write_xlsx
+from pkg.xlsx_writer_pdfxml import write_xlsx_pdfxml
 
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_iul import write_xlsx_iul
 
 def main():
-    ap = argparse.ArgumentParser(description="IFC CRC Checker (CLI) — сверка XML↔IFC и/или ИУЛ(PDF)↔IFC с отчётами XLSX")
+    ap = argparse.ArgumentParser(description="IFC CRC Checker (CLI) — сверка XML↔IFC, ИУЛ(PDF)↔IFC и PDF↔XML с отчётами XLSX")
     ap.add_argument("--ifc-dir", type=Path, required=True, help="Папка с IFC-файлами")
     ap.add_argument("--recursive-ifc", action="store_true", help="Рекурсивно сканировать подпапки (IFC)")
     ap.add_argument("--out", type=Path, help="Куда сохранить .xlsx (XML), по умолчанию рядом с XML или в CWD")
 
     # XML
     ap.add_argument("--check-xml", action="store_true", help="Выполнить проверку XML↔IFC")
-    ap.add_argument("--xml", type=Path, help="Путь к XML с перечнем IFC")
+    ap.add_argument("--xml", type=Path, help="Путь к XML с перечнем IFC и SignFile")
+
+    # PDF↔XML
+    ap.add_argument("--check-pdf-xml", action="store_true", help="Выполнить проверку PDF↔XML (SignFile)")
 
     # IUL
     ap.add_argument("--check-iul", action="store_true", help="Выполнить проверку ИУЛ(PDF)↔IFC")
@@ -41,9 +45,10 @@ def main():
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s: %(message)s")
 
-    if not (args.check_xml or args.check_iul):
+    if not (args.check_xml or args.check_iul or args.check_pdf_xml):
         args.check_xml = True
         args.check_iul = True
+        args.check_pdf_xml = True
 
     if not args.ifc_dir.exists() or not args.ifc_dir.is_dir():
         logging.error("Папка с IFC не найдена/не является папкой: %s", args.ifc_dir); return 2
@@ -86,6 +91,29 @@ def main():
         rows_iul = build_report_iul(iul_map, ifc_files, strict_pdf_name=bool(args.pdf_name_strict))
         exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
         logging.info("Готово (IUL). Отчёт: %s | Итоги: %s", out_iul, stats_iul)
+
+    # PDF ↔ XML (SignFile)
+    if args.check_pdf_xml:
+        if not args.xml or not args.xml.exists():
+            logging.error("Указана проверка PDF↔XML, но путь к XML не задан или файл не найден."); return 2
+        out_pdf = (args.out or args.xml.with_name("ifc_crc_report.xlsx"))
+        out_pdf = out_pdf.with_name(out_pdf.stem.replace('.xlsx','') + "_pdfxml.xlsx")
+        if out_pdf.exists() and not args.force:
+            logging.error("Файл отчёта (PDF↔XML) уже существует: %s. Запустите с --force для перезаписи.", out_pdf); return 2
+        rules_pdf = {
+            "entry_tag": "SignFile",
+            "name_tag": "FileName",
+            "checksum_tag": "FileChecksum",
+            "format_tag": "FileFormat",
+            "filter_format": "PDF",
+        }
+        pdf_map = extract_from_xml(args.xml, rules_pdf, case_sensitive=True)
+        pdf_files = collect_pdf_files(args.xml.parent, recursive=args.recursive_pdf)
+        rows_pdf = build_report(pdf_map, pdf_files, case_sensitive=True)
+        for r in rows_pdf:
+            r["CRC-32 PDF"] = r.pop("CRC-32 IFC", None)
+        exit_pdf, stats_pdf = write_xlsx_pdfxml(rows_pdf, out_pdf)
+        logging.info("Готово (PDF↔XML). Отчёт: %s | Итоги: %s", out_pdf, stats_pdf)
 
     return 0
 
