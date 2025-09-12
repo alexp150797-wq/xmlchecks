@@ -46,18 +46,25 @@ def main():
         args.check_iul = True
 
     if not args.ifc_dir.exists() or not args.ifc_dir.is_dir():
-        logging.error("Папка с IFC не найдена/не является папкой: %s", args.ifc_dir); return 2
+        logging.error("Папка с IFC не найдена/не является папкой: %s", args.ifc_dir)
+        return 2
     ifc_files = collect_ifc_files(args.ifc_dir, recursive=args.recursive_ifc)
     if not ifc_files:
-        logging.error("В папке не найдено файлов *.ifc"); return 2
+        logging.error("В папке не найдено файлов *.ifc")
+        return 2
 
     # XML
     if args.check_xml:
         if not args.xml or not args.xml.exists():
-            logging.error("Указана проверка XML, но путь к XML не задан или файл не найден."); return 2
+            logging.error("Указана проверка XML, но путь к XML не задан или файл не найден.")
+            return 2
         out_xml = args.out or args.xml.with_name("ifc_crc_report.xlsx")
         if out_xml.exists() and not args.force:
-            logging.error("Файл отчёта (XML) уже существует: %s. Запустите с --force для перезаписи.", out_xml); return 2
+            logging.error(
+                "Файл отчёта (XML) уже существует: %s. Запустите с --force для перезаписи.",
+                out_xml,
+            )
+            return 2
         rules = read_rules(Path(__file__).with_name("rules.yaml"))
         xml_map = extract_from_xml(args.xml, rules, case_sensitive=True)
         rows_xml = build_report(xml_map, ifc_files, case_sensitive=True)
@@ -72,16 +79,22 @@ def main():
         if args.iul_dir and args.iul_dir.exists():
             pdfs.extend(collect_pdf_files(args.iul_dir, recursive=args.recursive_pdf))
         if not pdfs:
-            logging.error("Указана проверка ИУЛ, но PDF не заданы/не найдены."); return 2
+            logging.error("Указана проверка ИУЛ, но PDF не заданы/не найдены.")
+            return 2
         if PdfReader is None:
-            logging.error("Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости."); return 2
+            logging.error("Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.")
+            return 2
         if args.xml:
             out_iul = (args.out or args.xml.with_name("ifc_crc_report.xlsx"))
             out_iul = out_iul.with_name(out_iul.stem.replace('.xlsx','') + "_iul.xlsx")
         else:
             out_iul = Path.cwd() / "ifc_crc_report_iul.xlsx"
         if out_iul.exists() and not args.force:
-            logging.error("Файл отчёта (IUL) уже существует: %s. Запустите с --force для перезаписи.", out_iul); return 2
+            logging.error(
+                "Файл отчёта (IUL) уже существует: %s. Запустите с --force для перезаписи.",
+                out_iul,
+            )
+            return 2
         iul_map = extract_iul_entries(pdfs)
         rows_iul = build_report_iul(iul_map, ifc_files, strict_pdf_name=bool(args.pdf_name_strict))
         _, stats_iul = write_xlsx_iul(rows_iul, out_iul)
