@@ -69,7 +69,9 @@ def main():
         if out_xml.exists() and not args.force:
             logging.error("Файл отчёта (XML) уже существует: %s. Запустите с --force для перезаписи.", out_xml); return 2
         rules = read_rules(Path(__file__).with_name("rules.yaml"))
-        xml_map, xml_pdf = extract_from_xml(args.xml, rules, case_sensitive=True)
+        xml_map, xml_pdf = extract_from_xml(
+            args.xml, rules, case_sensitive=True, include_sign_files=True
+        )
         rows_xml = build_report(xml_map, ifc_files, case_sensitive=True)
         exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
         logging.info("Готово (XML). Отчёт: %s | Итоги: %s | Подписей PDF: %s", out_xml, stats_xml, len(xml_pdf))

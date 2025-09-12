@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 import xml.etree.ElementTree as ET
 
 try:
@@ -43,7 +43,21 @@ def _find_child_text(elem: ET.Element, wanted: str) -> Optional[str]:
             return txt if txt else None
     return None
 
-def extract_from_xml(xml_path: Path, rules: Dict[str, Any], case_sensitive: bool=True) -> Tuple[Dict[str, Dict[str, Any]], List[Dict[str, Any]]]:
+def extract_from_xml(
+    xml_path: Path,
+    rules: Dict[str, Any],
+    case_sensitive: bool = True,
+    include_sign_files: bool = False,
+) -> Any:
+    """Parse ``xml_path`` and extract file information.
+
+    By default only data about model files are returned.  If ``include_sign_files``
+    is ``True`` the function will also look for nested ``SignFile`` entries and
+    return a tuple ``(model_map, sign_files)`` where ``sign_files`` is a list of
+    dictionaries with information about every signature file.  This keeps the
+    simple dictionary return type that the public API historically exposed while
+    still allowing the CLI/GUI tools to access the additional data.
+    """
     if not xml_path.exists():
         raise FileNotFoundError(f"XML не найден: {xml_path}")
     tree = ET.parse(str(xml_path))
@@ -99,4 +113,6 @@ def extract_from_xml(xml_path: Path, rules: Dict[str, Any], case_sensitive: bool
                     "crc_hex": s_crc,
                 })
 
-    return result_ifc, result_pdf
+    if include_sign_files:
+        return result_ifc, result_pdf
+    return result_ifc

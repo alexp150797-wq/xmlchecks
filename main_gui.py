@@ -263,7 +263,9 @@ class App(tk.Tk):
                     else:
                         self._log(f"{EMOJI['xml']} Чтение XML...")
                         rules = read_rules(Path(__file__).with_name("rules.yaml"))
-                        xml_map, xml_pdf = extract_from_xml(xml, rules, case_sensitive=True)
+                        xml_map, xml_pdf = extract_from_xml(
+                            xml, rules, case_sensitive=True, include_sign_files=True
+                        )
                         self._log(f"    Записей IFC в XML: {len(xml_map)} | Подписей PDF: {len(xml_pdf)}")
 
                         self._log(f"{EMOJI['search']} Сверка по XML...")
