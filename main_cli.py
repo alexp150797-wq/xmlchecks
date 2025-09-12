@@ -61,7 +61,7 @@ def main():
         rules = read_rules(Path(__file__).with_name("rules.yaml"))
         xml_map = extract_from_xml(args.xml, rules, case_sensitive=True)
         rows_xml = build_report(xml_map, ifc_files, case_sensitive=True)
-        exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
+        _, stats_xml = write_xlsx(rows_xml, out_xml)
         logging.info("Готово (XML). Отчёт: %s | Итоги: %s", out_xml, stats_xml)
 
     # IUL
@@ -84,7 +84,7 @@ def main():
             logging.error("Файл отчёта (IUL) уже существует: %s. Запустите с --force для перезаписи.", out_iul); return 2
         iul_map = extract_iul_entries(pdfs)
         rows_iul = build_report_iul(iul_map, ifc_files, strict_pdf_name=bool(args.pdf_name_strict))
-        exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
+        _, stats_iul = write_xlsx_iul(rows_iul, out_iul)
         logging.info("Готово (IUL). Отчёт: %s | Итоги: %s", out_iul, stats_iul)
 
     return 0

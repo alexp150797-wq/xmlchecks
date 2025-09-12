@@ -309,7 +309,7 @@ class App(tk.Tk):
                                 self._log(f"{EMOJI['err']} {status}(XML) — {name} | {r.get('Подробности','')}", "err")
 
                         self._log(f"{EMOJI['xlsx']} Формирование XLSX (XML)...")
-                        exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
+                        _, stats_xml = write_xlsx(rows_xml, out_xml)
                         self._log(
                             f"{EMOJI['stats']} [ИТОГИ XML] Всего: {stats_xml.get('total')} | OK: {stats_xml.get('ok')} | Ошибок: {stats_xml.get('errors')}"
                         )
@@ -360,7 +360,7 @@ class App(tk.Tk):
                                     )
 
                             self._log(f"{EMOJI['xlsx']} Формирование XLSX (IUL)...")
-                            exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
+                            _, stats_iul = write_xlsx_iul(rows_iul, out_iul)
                             self._log(
                                 f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}"
                             )

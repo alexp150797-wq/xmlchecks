@@ -44,6 +44,7 @@ def build_report(
         crc_match = None
         status: List[str] = []
         details: List[str] = []
+        xml_name = None
 
         if meta is None:
             # пытаемся сопоставить по CRC
@@ -79,8 +80,8 @@ def build_report(
 
         rows.append({
             "Имя файла": base,
-            "Файл из XML": (base if meta else (hits[0] if 'hits' in locals() and hits else None)),
-            "CRC-32 XML": ((meta.get('crc_hex') or '').upper() if meta else (None)),
+            "Файл из XML": (base if meta else xml_name),
+            "CRC-32 XML": ((meta.get('crc_hex') or '').upper() if meta else None),
             "CRC-32 IFC": actual_crc_hex,
             "Имя совпадает": _tri(name_match),
             "CRC совпадает": _tri(crc_match),
