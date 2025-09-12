@@ -65,12 +65,26 @@ def style_sheet(ws, left_cols: Iterable[int], yes_no_cols: Iterable[str], status
     ws.conditional_formatting.add(f"{status_col}2:{status_col}{ws.max_row}", CellIsRule(operator="equal", formula=['"OK"'], fill=GREEN))
     ws.conditional_formatting.add(f"{status_col}2:{status_col}{ws.max_row}", CellIsRule(operator="notEqual", formula=['"OK"'], fill=RED))
 
-def add_summary_sheet(wb, rows: List[Dict], status_key: str = "Статус") -> Dict[str, int]:
+def add_summary_sheet(wb, rows: List[Dict], status_key: str = "Статус", title: str = "Summary") -> Dict[str, int]:
     """Create a Summary sheet with statistics.
 
-    Returns dict with keys ``total``, ``ok`` and ``errors``.
+    Parameters
+    ----------
+    wb: Workbook
+        Target workbook.
+    rows: List[Dict]
+        Report rows to summarise.
+    status_key: str, optional
+        Key name used to determine status; defaults to ``"Статус"``.
+    title: str, optional
+        Title for the summary sheet. Defaults to ``"Summary"``.
+
+    Returns
+    -------
+    Dict[str, int]
+        Dict with keys ``total``, ``ok`` and ``errors``.
     """
-    sm = wb.create_sheet("Summary")
+    sm = wb.create_sheet(title)
     total = len(rows)
     ok = sum(1 for r in rows if r.get(status_key) == "OK")
     errors = total - ok
