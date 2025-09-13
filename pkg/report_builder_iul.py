@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 import time
 from .crc import compute_crc32
 from .iul_reader import IulEntry, pdf_name_ok_lenient, pdf_name_ok_strict
@@ -29,13 +29,24 @@ PDF_NAME_COL = "Имя PDF соответствует шаблону"
 def build_report_iul(
     iul_map: Dict[str, IulEntry],
     ifc_files: List[Path],
+    pdf_paths: Optional[List[Path]] = None,
+    *,
     strict_pdf_name: bool = False,
     include_pdf_name_col: bool | None = None,
 ) -> List[Dict]:
+    """Сравнение ИУЛ(PDF) ↔ IFC."""
     if include_pdf_name_col is None:
         include_pdf_name_col = strict_pdf_name
     rows: List[Dict] = []
     used = set()
+
+    pdf_lookup: Dict[str, str] = {}
+    if pdf_paths:
+        for p in pdf_paths:
+            stem = p.stem.upper()
+            if stem.endswith("_ИУЛ") or stem.endswith("_УЛ"):
+                cand = stem.rsplit("_", 1)[0] + ".IFC"
+                pdf_lookup[cand] = p.name
 
     iul_crc_index: Dict[str, List[str]] = {}
     for k, e in iul_map.items():
@@ -56,6 +67,8 @@ def build_report_iul(
         pdf_name_ok = None
         status: List[str] = []
         details: List[str] = []
+
+        pdf_name_from_file = pdf_lookup.get(base.upper())
 
         if e is None:
             hits = iul_crc_index.get(actual_crc_hex, [])
@@ -103,24 +116,28 @@ def build_report_iul(
             else:
                 details.append(f"В ИУЛ отсутствует дата/время; ожидается {actual_dt}")
 
-            if e.source_pdf:
-                pdf_name_ok = pdf_name_ok_strict(base, e.source_pdf) if strict_pdf_name else pdf_name_ok_lenient(base, e.source_pdf)
+            if strict_pdf_name and e.source_pdf:
+                pdf_name_ok = pdf_name_ok_strict(base, e.source_pdf)
                 if not pdf_name_ok:
                     status.append("PDF_NAME_MISMATCH")
-                    rule = "строгому шаблону (имяIFC_УЛ.pdf)" if strict_pdf_name else "мягкому шаблону (содержит ИУЛ/УЛ и имя IFC)"
                     expected_pdf = f"{Path(base).stem}_УЛ.pdf"
                     details.append(
-                        f"Имя PDF не соответствует правилу: {e.source_pdf}; ожидается {expected_pdf} [{rule}]"
+                        f"Имя PDF не соответствует строгому правилу: {e.source_pdf}; ожидается {expected_pdf}"
                     )
 
         if not status and e is not None:
             status.append("OK")
 
         expected_pdf_name = f"{Path(base).stem}_УЛ.pdf"
+        pdf_name = (
+            e.source_pdf
+            if (e and e.source_pdf)
+            else (pdf_name_from_file or "Не найден")
+        )
         row = {
-            "Имя файла": base,
-            "Имя PDF": (e.source_pdf if e else "Не найден"),
-            "Файл из ИУЛ": (e.basename if e else None),
+            "Имя файла IFC": base,
+            "Имя PDF": pdf_name,
+            "Имя файла IFC из ИУЛ": (e.basename if e else None),
             "CRC-32 ИУЛ": (e.crc_hex.upper() if (e and e.crc_hex) else None),
             "CRC-32 IFC": actual_crc_hex,
             "Дата/время ИУЛ": (e.dt_str if e else None),
@@ -147,9 +164,9 @@ def build_report_iul(
         if k in used:
             continue
         row = {
-            "Имя файла": None,
+            "Имя файла IFC": None,
             "Имя PDF": e.source_pdf,
-            "Файл из ИУЛ": e.basename,
+            "Имя файла IFC из ИУЛ": e.basename,
             "CRC-32 ИУЛ": (e.crc_hex.upper() if e.crc_hex else None),
             "CRC-32 IFC": None,
             "Дата/время ИУЛ": e.dt_str,

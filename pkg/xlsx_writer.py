@@ -7,8 +7,8 @@ from openpyxl import Workbook
 from .xlsx_utils import autosize, apply_borders, style_sheet, add_summary_sheet
 
 HEADERS = [
-    "Имя файла",
-    "Файл из XML",
+    "Имя файла IFC",
+    "Имя файла IFC из XML",
     "CRC-32 XML",
     "CRC-32 IFC",
     "Имя совпадает",
@@ -25,8 +25,8 @@ def write_xlsx(rows: List[Dict], out_path: Path) -> tuple[int, dict]:
     ws.append(HEADERS)
     for r in rows:
         ws.append([
-            r.get("Имя файла"),
-            r.get("Файл из XML"),
+            r.get("Имя файла IFC"),
+            r.get("Имя файла IFC из XML"),
             r.get("CRC-32 XML"),
             r.get("CRC-32 IFC"),
             r.get("Имя совпадает"),

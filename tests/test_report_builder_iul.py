@@ -32,17 +32,35 @@ def test_build_report_iul_scenarios(tmp_path):
     crc_name, dt_name, size_name = info(name_mismatch_file)
 
     iul_map = {
-        'good.ifc': IulEntry('good.ifc', crc_good, dt_good, size_good, 'ctx', 'good_ИУЛ.pdf'),
-        'crc_bad.ifc': IulEntry('crc_bad.ifc', 'FFFFFFFF', dt_crc, size_crc, 'ctx', 'crc_bad_ИУЛ.pdf'),
-        'size_bad.ifc': IulEntry('size_bad.ifc', crc_size, dt_size, size_size + 1, 'ctx', 'size_bad_ИУЛ.pdf'),
-        'dt_bad.ifc': IulEntry('dt_bad.ifc', crc_dt, '01.01.2000 00:00', size_dt, 'ctx', 'dt_bad_ИУЛ.pdf'),
+        'good.ifc': IulEntry('good.ifc', crc_good, dt_good, size_good, 'ctx', 'good_УЛ.pdf'),
+        'crc_bad.ifc': IulEntry('crc_bad.ifc', 'FFFFFFFF', dt_crc, size_crc, 'ctx', 'crc_bad_УЛ.pdf'),
+        'size_bad.ifc': IulEntry('size_bad.ifc', crc_size, dt_size, size_size + 1, 'ctx', 'size_bad_УЛ.pdf'),
+        'dt_bad.ifc': IulEntry('dt_bad.ifc', crc_dt, '01.01.2000 00:00', size_dt, 'ctx', 'dt_bad_УЛ.pdf'),
         'pdf_bad.ifc': IulEntry('pdf_bad.ifc', crc_pdf, dt_pdf, size_pdf, 'ctx', 'pdf_bad.pdf'),
-        'other.ifc': IulEntry('other.ifc', crc_name, dt_name, size_name, 'ctx', 'name_mismatch_ИУЛ.pdf'),
-        'missing.ifc': IulEntry('missing.ifc', 'ABCDEF12', '01.01.2024 00:00', 123, 'ctx', 'missing_ИУЛ.pdf'),
+        'other.ifc': IulEntry('other.ifc', crc_name, dt_name, size_name, 'ctx', 'name_mismatch_УЛ.pdf'),
+        'missing.ifc': IulEntry('missing.ifc', 'ABCDEF12', '01.01.2024 00:00', 123, 'ctx', 'missing_УЛ.pdf'),
     }
 
-    rows = build_report_iul(iul_map, [good, crc_bad, size_bad, dt_bad, pdf_bad, name_mismatch_file, extra])
-    status = {row['Имя файла'] or row['Файл из ИУЛ']: row['Статус'] for row in rows}
+    pdf_paths = [
+        tmp_path / 'good_УЛ.pdf',
+        tmp_path / 'crc_bad_УЛ.pdf',
+        tmp_path / 'size_bad_УЛ.pdf',
+        tmp_path / 'dt_bad_УЛ.pdf',
+        tmp_path / 'pdf_bad.pdf',
+        tmp_path / 'name_mismatch_УЛ.pdf',
+        tmp_path / 'missing_УЛ.pdf',
+        tmp_path / 'extra_УЛ.pdf',
+    ]
+    for p in pdf_paths:
+        p.write_text('pdf')
+
+    rows = build_report_iul(
+        iul_map,
+        [good, crc_bad, size_bad, dt_bad, pdf_bad, name_mismatch_file, extra],
+        pdf_paths=pdf_paths,
+        strict_pdf_name=True,
+    )
+    status = {row['Имя файла IFC'] or row['Имя файла IFC из ИУЛ']: row['Статус'] for row in rows}
 
     assert status['good.ifc'] == 'OK'
     assert status['crc_bad.ifc'] == 'CRC_MISMATCH'
@@ -53,5 +71,5 @@ def test_build_report_iul_scenarios(tmp_path):
     assert status['extra.ifc'] == 'ERROR_IFC_EXTRA'
     assert status['missing.ifc'] == 'ERROR_IUL_EXTRA'
 
-    row_extra = next(r for r in rows if r.get('Имя файла') == 'extra.ifc')
-    assert row_extra['Имя PDF'] == 'Не найден'
+    row_extra = next(r for r in rows if r.get('Имя файла IFC') == 'extra.ifc')
+    assert row_extra['Имя PDF'] == 'extra_УЛ.pdf'
