@@ -102,7 +102,8 @@ class App(tk.Tk):
         header = tk.Frame(self, bg="#4a90e2")
         header.pack(fill="x")
         ttk.Label(header, text="Сверка: XML↔IFC и ИУЛ(PDF)↔IFC → XLSX", style="Header.TLabel").pack(side="left", **pad)
-        ttk.Label(header, text="Зелёный — успех, красный — ошибка. Сравнение имён всегда строгое.", style="Small.TLabel").pack(side="right", **pad)
+        ttk.Label(header, text="Зелёный — успех, красный — ошибка. Имена сопоставляются с учётом регистра.", style="Small.TLabel").pack(side="right", **pad)
+        ttk.Button(header, text="Инструкция", command=self._show_instruction).pack(side="right", **pad)
 
         body = ttk.Frame(self); body.pack(fill="both", expand=True, padx=10, pady=6)
 
@@ -180,6 +181,21 @@ class App(tk.Tk):
         body.columnconfigure(1, weight=1)
         body.columnconfigure(2, weight=1)
         body.rowconfigure(8, weight=1)
+
+    def _show_instruction(self):
+        """Открывает окно с краткой инструкцией."""
+        instr_path = Path(__file__).with_name("INSTRUCTION.md")
+        try:
+            text = instr_path.read_text(encoding="utf-8")
+        except Exception:
+            text = "Файл инструкции не найден."
+        win = tk.Toplevel(self)
+        win.title("Инструкция")
+        win.geometry("600x400")
+        txt = tk.Text(win, wrap="word")
+        txt.insert("1.0", text)
+        txt.config(state="disabled")
+        txt.pack(fill="both", expand=True)
 
     def _choose_xml(self):
         p = filedialog.askopenfilename(title="Выберите XML", filetypes=[("XML","*.xml"),("Все файлы","*.*")])
