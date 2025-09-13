@@ -28,6 +28,11 @@ IFC CRC Checker — полная сборка
     # только ИУЛ↔IFC (папка с PDF, рекурсивно, строгая проверка имени PDF)
     py main_cli.py --check-iul --ifc-dir "C:\IFC" --recursive-ifc --iul-dir "C:\IUL" --recursive-pdf --pdf-name-strict --force
 
+Сборка .exe (Windows, PyInstaller)
+    py -m pip install -r requirements.txt -r requirements-dev.txt
+    py build_exe.py
+Экзешники появятся в папке dist/.
+
 Примечание по VS Code
 - Если запускаете через «Play», убедитесь, что рабочая директория — это папка ifc_crc_checker_mod.
   Либо используйте запуск из терминала:
