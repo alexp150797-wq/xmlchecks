@@ -44,6 +44,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
 
         name_match = None
         crc_match = None
+        xml_crc_from_xml = None
         status: List[str] = []
         details: List[str] = []
         xml_name_from_xml = base if meta else None
@@ -54,6 +55,8 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
             if len(hits) == 1:
                 xml_name = hits[0]
                 xml_name_from_xml = xml_name
+                meta_hit = xml_map.get(xml_name if case_sensitive else xml_name.lower())
+                xml_crc_from_xml = ((meta_hit.get("crc_hex") or "").upper() if meta_hit else None)
                 used_xml.add(xml_name if case_sensitive else xml_name.lower())
                 name_match = (xml_name == base)
                 if not name_match:
@@ -69,12 +72,12 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
         else:
             used_xml.add(key)
             name_match = True
-            xml_crc = (meta.get("crc_hex") or "").upper() or None
-            if xml_crc:
-                crc_match = (xml_crc == actual_crc_hex)
+            xml_crc_from_xml = (meta.get("crc_hex") or "").upper() or None
+            if xml_crc_from_xml:
+                crc_match = (xml_crc_from_xml == actual_crc_hex)
                 if not crc_match:
                     status.append("CRC_MISMATCH")
-                    details.append(f"CRC-32 не совпадает: XML={xml_crc}, IFC={actual_crc_hex}")
+                    details.append(f"CRC-32 не совпадает: XML={xml_crc_from_xml}, IFC={actual_crc_hex}")
             else:
                 details.append("В XML отсутствует CRC-32")
 
@@ -84,7 +87,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
         rows.append({
             "Имя файла": base,
             "Файл из XML": xml_name_from_xml,
-            "CRC-32 XML": ((meta.get('crc_hex') or '').upper() if meta else None),
+            "CRC-32 XML": xml_crc_from_xml,
             "CRC-32 IFC": actual_crc_hex,
             "Имя совпадает": tri(name_match),
             "CRC совпадает": tri(crc_match),
