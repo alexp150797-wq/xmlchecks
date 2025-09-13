@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from tkinter.scrolledtext import ScrolledText
 
 from pkg.xml_reader import read_rules, extract_from_xml
 from pkg.scanner import collect_ifc_files, collect_pdf_files
@@ -102,7 +103,8 @@ class App(tk.Tk):
         header = tk.Frame(self, bg="#4a90e2")
         header.pack(fill="x")
         ttk.Label(header, text="Сверка: XML↔IFC и ИУЛ(PDF)↔IFC → XLSX", style="Header.TLabel").pack(side="left", **pad)
-        ttk.Label(header, text="Зелёный — успех, красный — ошибка. Сравнение имён всегда строгое.", style="Small.TLabel").pack(side="right", **pad)
+        ttk.Label(header, text="Зелёный — успех, красный — ошибка. Имена сопоставляются с учётом регистра.", style="Small.TLabel").pack(side="right", **pad)
+        ttk.Button(header, text="Инструкция", command=self._show_instruction).pack(side="right", **pad)
 
         body = ttk.Frame(self); body.pack(fill="both", expand=True, padx=10, pady=6)
 
@@ -180,6 +182,43 @@ class App(tk.Tk):
         body.columnconfigure(1, weight=1)
         body.columnconfigure(2, weight=1)
         body.rowconfigure(8, weight=1)
+
+    def _show_instruction(self):
+        """Показывает инструкцию: окно выплывает справа и поддерживает прокрутку."""
+        instr_path = Path(__file__).with_name("INSTRUCTION.md")
+        try:
+            text = instr_path.read_text(encoding="utf-8")
+        except Exception:
+            text = "Файл инструкции не найден."
+
+        self.update_idletasks()
+        width = 400
+        height = self.winfo_height()
+        root_x = self.winfo_rootx()
+        root_y = self.winfo_rooty()
+        start_x = root_x + self.winfo_width() + width
+        target_x = root_x + self.winfo_width()
+
+        win = tk.Toplevel(self)
+        win.title("Инструкция")
+        win.geometry(f"{width}x{height}+{start_x}+{root_y}")
+        win.resizable(False, True)
+
+        txt = ScrolledText(win, wrap="word")
+        txt.insert("1.0", text)
+        txt.config(state="disabled")
+        txt.pack(fill="both", expand=True)
+
+        def slide():
+            nonlocal start_x
+            start_x -= 20
+            if start_x <= target_x:
+                win.geometry(f"{width}x{height}+{target_x}+{root_y}")
+            else:
+                win.geometry(f"{width}x{height}+{start_x}+{root_y}")
+                win.after(10, slide)
+
+        slide()
 
     def _choose_xml(self):
         p = filedialog.askopenfilename(title="Выберите XML", filetypes=[("XML","*.xml"),("Все файлы","*.*")])
