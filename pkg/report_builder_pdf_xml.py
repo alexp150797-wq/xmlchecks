@@ -38,6 +38,7 @@ def build_report_pdf_xml(xml_map: Dict[str, dict], pdf_files: List[Path], case_s
         status: List[str] = []
         details: List[str] = []
         xml_name_from_xml = base if meta else None
+        meta_matched = meta
 
         if meta is None:
             # пытаемся сопоставить по CRC
@@ -45,6 +46,7 @@ def build_report_pdf_xml(xml_map: Dict[str, dict], pdf_files: List[Path], case_s
             if len(hits) == 1:
                 xml_name = hits[0]
                 xml_name_from_xml = xml_name
+                meta_matched = xml_map.get(xml_name)
                 used_xml.add(xml_name if case_sensitive else xml_name.lower())
                 name_match = (xml_name == base)
                 if not name_match:
@@ -75,7 +77,7 @@ def build_report_pdf_xml(xml_map: Dict[str, dict], pdf_files: List[Path], case_s
         rows.append({
             "Имя файла": base,
             "Файл из XML": xml_name_from_xml,
-            "CRC-32 XML": ((meta.get('crc_hex') or '').upper() if meta else None),
+            "CRC-32 XML": ((meta_matched.get('crc_hex') or '').upper() if meta_matched else None),
             "CRC-32 PDF": actual_crc_hex,
             "Имя совпадает": tri(name_match),
             "CRC совпадает": tri(crc_match),
