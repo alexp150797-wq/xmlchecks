@@ -19,8 +19,8 @@ from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_combined import write_combined_xlsx
 
 APP_TITLE = "IFC CRC Checker — GUI"
-# slightly wider to fit buttons and locked size
-APP_MIN_W, APP_MIN_H = 1080, 800
+# slightly wider for better layout
+APP_MIN_W, APP_MIN_H = 1160, 800
 
 EMOJI = {
     "xml": "🧾",
