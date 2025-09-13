@@ -53,7 +53,7 @@ def _extract_text_pypdf2(pdf_path: Path) -> str:
     except Exception:
         return ""
 
-def _extract_text_ocr(pdf_path: Path, dpi: int = 200) -> str:
+def _extract_text_ocr(pdf_path: Path, dpi: int = 300) -> str:
     if fitz is None or pytesseract is None or Image is None:
         return ""
     try:
@@ -63,9 +63,10 @@ def _extract_text_ocr(pdf_path: Path, dpi: int = 200) -> str:
     text_parts: List[str] = []
     for page in doc:
         try:
-            mat = fitz.Matrix(dpi/72, dpi/72)
+            mat = fitz.Matrix(dpi / 72, dpi / 72)
             pix = page.get_pixmap(matrix=mat, alpha=False)
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img = img.convert("L")  # grayscale for better OCR
             txt = pytesseract.image_to_string(img, lang="rus+eng")
             if txt:
                 text_parts.append(txt)

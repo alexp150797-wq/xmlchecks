@@ -52,3 +52,6 @@ def test_build_report_iul_scenarios(tmp_path):
     assert status['name_mismatch.ifc'] == 'NAME_MISMATCH'
     assert status['extra.ifc'] == 'ERROR_IFC_EXTRA'
     assert status['missing.ifc'] == 'ERROR_IUL_EXTRA'
+
+    row_extra = next(r for r in rows if r.get('Имя файла') == 'extra.ifc')
+    assert row_extra['Имя PDF'] == 'extra_УЛ.pdf'

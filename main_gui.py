@@ -47,8 +47,8 @@ class App(tk.Tk):
         self.resizable(False, False)
         self._apply_theme()
 
-        # error tracking for optional log saving
-        self.has_errors = False
+        # store critical error messages for optional log saving
+        self.error_messages: list[str] = []
 
         # Paths & options
         self.var_xml = tk.StringVar()
@@ -279,12 +279,29 @@ class App(tk.Tk):
         if p:
             self.var_out.set(p)
 
-    def _log(self, msg, kind="info"):
+    def _log(self, msg, kind="info", critical: bool = False):
         tag = "info" if kind not in ("ok", "err", "warn") else kind
-        if tag == "err":
-            self.has_errors = True
+        if critical:
+            self.error_messages.append(msg)
         self.log.insert("end", msg + "\n", tag)
         self.log.see("end"); self.update()
+
+    def _save_error_log(self):
+        p = filedialog.asksaveasfilename(
+            title="Сохранить журнал ошибок",
+            defaultextension=".txt",
+            filetypes=[("Text", "*.txt"), ("All files", "*.*")],
+        )
+        if p:
+            try:
+                Path(p).write_text("\n".join(self.error_messages), encoding="utf-8")
+                self._log(f"{EMOJI['path']} Журнал сохранён: {p}")
+            except Exception as e:
+                self._log(f"{EMOJI['err']} Не удалось сохранить журнал: {e}", "err")
+
+    def _error_dialog(self, message: str):
+        if messagebox.askyesno("Ошибка", f"{message}\n\nСохранить журнал ошибок?"):
+            self._save_error_log()
 
     def _open_path(self, path: Path):
         try:
@@ -305,7 +322,7 @@ class App(tk.Tk):
     def _run(self):
         try:
             self.log.delete("1.0", "end")
-            self.has_errors = False
+            self.error_messages = []
 
             check_xml = bool(self.var_check_xml.get())
             check_iul = bool(self.var_check_iul.get())
@@ -316,7 +333,9 @@ class App(tk.Tk):
             xml = Path(self.var_xml.get()) if self.var_xml.get() else None
             out_path = Path(self.var_out.get()) if self.var_out.get() else None
             if out_path is None:
-                self._log(f"{EMOJI['err']} [ОШИБКА] Путь для отчёта не указан.", "err")
+                msg = "Путь для отчёта не указан."
+                self._log(f"{EMOJI['err']} [ОШИБКА] {msg}", "err", critical=True)
+                self._error_dialog(msg)
                 return
             if out_path.exists() and not self._ask_overwrite(out_path):
                 self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись отчёта отменена.")
@@ -330,8 +349,9 @@ class App(tk.Tk):
                 files_ifc = sorted({p.resolve() for p in files_ifc})
                 self._log(f"{EMOJI['ifc']} Выбрано IFC: {len(files_ifc)}")
                 if not files_ifc:
-                    self._log(f"{EMOJI['err']} [ОШИБКА] IFC не выбраны/не найдены.", "err")
-                    messagebox.showerror("Ошибка", "Не выбраны файлы IFC")
+                    msg = "IFC не выбраны/не найдены."
+                    self._log(f"{EMOJI['err']} [ОШИБКА] {msg}", "err", critical=True)
+                    self._error_dialog("Не выбраны файлы IFC")
                     return
 
             iul_pdfs: list[Path] = []
@@ -439,10 +459,8 @@ class App(tk.Tk):
                     )
                     break
                 except PermissionError:
-                    self._log(
-                        f"{EMOJI['err']} [ОШИБКА] Не удалось записать отчёт (возможно открыт): {out_path}",
-                        "err",
-                    )
+                    msg = f"Не удалось записать отчёт (возможно открыт): {out_path}"
+                    self._log(f"{EMOJI['err']} [ОШИБКА] {msg}", "err", critical=True)
                     if not messagebox.askretrycancel(
                         "Файл занят",
                         f"Не удалось записать файл:\n{out_path}\nЗакройте файл и повторите.",
@@ -451,6 +469,7 @@ class App(tk.Tk):
                             f"{EMOJI['report']} [ОТМЕНЕНО] Запись отчёта отменена.",
                             "warn",
                         )
+                        self._error_dialog(msg)
                         return
 
             if check_xml and stats.get("xml"):
@@ -469,26 +488,11 @@ class App(tk.Tk):
             self._log(f"{EMOJI['done']} Готово.", "ok")
 
         except Exception as e:
-            self._log(f"{EMOJI['err']} [КРИТИЧЕСКАЯ ОШИБКА] {e}", "err")
-            messagebox.showerror("Критическая ошибка", str(e))
+            msg = f"[КРИТИЧЕСКАЯ ОШИБКА] {e}"
+            self._log(f"{EMOJI['err']} {msg}", "err", critical=True)
+            self._error_dialog(str(e))
         finally:
             self.progress.stop()
-            if self.has_errors:
-                if messagebox.askyesno(
-                    "Сохранить журнал",
-                    "В ходе выполнения возникли ошибки. Сохранить журнал в файл?",
-                ):
-                    p = filedialog.asksaveasfilename(
-                        title="Сохранить журнал",
-                        defaultextension=".txt",
-                        filetypes=[("Text", "*.txt"), ("All files", "*.*")],
-                    )
-                    if p:
-                        try:
-                            Path(p).write_text(self.log.get("1.0", "end"), encoding="utf-8")
-                            self._log(f"{EMOJI['path']} Журнал сохранён: {p}")
-                        except Exception as e:
-                            self._log(f"{EMOJI['err']} Не удалось сохранить журнал: {e}", "err")
 
 if __name__ == "__main__":
     App().mainloop()
