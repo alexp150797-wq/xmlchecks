@@ -19,7 +19,8 @@ from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_combined import write_combined_xlsx
 
 APP_TITLE = "IFC CRC Checker — GUI"
-APP_MIN_W, APP_MIN_H = 980, 760
+# slightly wider to fit buttons and locked size
+APP_MIN_W, APP_MIN_H = 1080, 800
 
 EMOJI = {
     "xml": "🧾",
@@ -43,7 +44,11 @@ class App(tk.Tk):
         self.title(APP_TITLE)
         self.minsize(APP_MIN_W, APP_MIN_H)
         self.geometry(f"{APP_MIN_W}x{APP_MIN_H}")
+        self.resizable(False, False)
         self._apply_theme()
+
+        # error tracking for optional log saving
+        self.has_errors = False
 
         # Paths & options
         self.var_xml = tk.StringVar()
@@ -275,7 +280,9 @@ class App(tk.Tk):
             self.var_out.set(p)
 
     def _log(self, msg, kind="info"):
-        tag = "info" if kind not in ("ok","err","warn") else kind
+        tag = "info" if kind not in ("ok", "err", "warn") else kind
+        if tag == "err":
+            self.has_errors = True
         self.log.insert("end", msg + "\n", tag)
         self.log.see("end"); self.update()
 
@@ -298,6 +305,7 @@ class App(tk.Tk):
     def _run(self):
         try:
             self.log.delete("1.0", "end")
+            self.has_errors = False
 
             check_xml = bool(self.var_check_xml.get())
             check_iul = bool(self.var_check_iul.get())
@@ -420,13 +428,30 @@ class App(tk.Tk):
                             else:
                                 self._log(f"{EMOJI['err']} {status}(IUL) — {name} | {r.get('Подробности','')}", "err")
 
-            stats = write_combined_xlsx(
-                rows_xml if check_xml else None,
-                rows_iul if check_iul else None,
-                rows_pdf if check_pdf_xml else None,
-                out_path,
-                include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
-            )
+            while True:
+                try:
+                    stats = write_combined_xlsx(
+                        rows_xml if check_xml else None,
+                        rows_iul if check_iul else None,
+                        rows_pdf if check_pdf_xml else None,
+                        out_path,
+                        include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
+                    )
+                    break
+                except PermissionError:
+                    self._log(
+                        f"{EMOJI['err']} [ОШИБКА] Не удалось записать отчёт (возможно открыт): {out_path}",
+                        "err",
+                    )
+                    if not messagebox.askretrycancel(
+                        "Файл занят",
+                        f"Не удалось записать файл:\n{out_path}\nЗакройте файл и повторите.",
+                    ):
+                        self._log(
+                            f"{EMOJI['report']} [ОТМЕНЕНО] Запись отчёта отменена.",
+                            "warn",
+                        )
+                        return
 
             if check_xml and stats.get("xml"):
                 s = stats["xml"]
@@ -448,6 +473,22 @@ class App(tk.Tk):
             messagebox.showerror("Критическая ошибка", str(e))
         finally:
             self.progress.stop()
+            if self.has_errors:
+                if messagebox.askyesno(
+                    "Сохранить журнал",
+                    "В ходе выполнения возникли ошибки. Сохранить журнал в файл?",
+                ):
+                    p = filedialog.asksaveasfilename(
+                        title="Сохранить журнал",
+                        defaultextension=".txt",
+                        filetypes=[("Text", "*.txt"), ("All files", "*.*")],
+                    )
+                    if p:
+                        try:
+                            Path(p).write_text(self.log.get("1.0", "end"), encoding="utf-8")
+                            self._log(f"{EMOJI['path']} Журнал сохранён: {p}")
+                        except Exception as e:
+                            self._log(f"{EMOJI['err']} Не удалось сохранить журнал: {e}", "err")
 
 if __name__ == "__main__":
     App().mainloop()

@@ -77,12 +77,7 @@ def _normalize_text(txt: str) -> str:
     txt = txt.replace("\r", "\n")
     return "\n".join(ln.strip() for ln in txt.splitlines())
 
-def extract_iul_entries_from_pdf(pdf_path: Path, progress: Optional[Callable[[IulEntry], None]] = None) -> List[IulEntry]:
-    text = _extract_text_pypdf2(pdf_path)
-    if not text or len(text.strip()) < 20:
-        text = _extract_text_ocr(pdf_path)
-    text = _normalize_text(text)
-
+def _parse_entries(text: str, pdf_name: str, progress: Optional[Callable[[IulEntry], None]] = None) -> List[IulEntry]:
     lines = [ln for ln in text.splitlines() if ln]
     entries: List[IulEntry] = []
     last_crc: Optional[str] = None
@@ -115,7 +110,7 @@ def extract_iul_entries_from_pdf(pdf_path: Path, progress: Optional[Callable[[Iu
                 dt_str=dt,
                 size_bytes=size,
                 context=ln,
-                source_pdf=pdf_path.name,
+                source_pdf=pdf_name,
             )
             entries.append(entry)
             if progress:
@@ -123,6 +118,17 @@ def extract_iul_entries_from_pdf(pdf_path: Path, progress: Optional[Callable[[Iu
                     progress(entry)
                 except Exception:
                     pass
+    return entries
+
+
+def extract_iul_entries_from_pdf(pdf_path: Path, progress: Optional[Callable[[IulEntry], None]] = None) -> List[IulEntry]:
+    text = _extract_text_pypdf2(pdf_path)
+    text = _normalize_text(text)
+    entries = _parse_entries(text, pdf_path.name, progress)
+    if not entries:
+        text_ocr = _extract_text_ocr(pdf_path)
+        text_ocr = _normalize_text(text_ocr)
+        entries = _parse_entries(text_ocr, pdf_path.name, progress)
     return entries
 
 def extract_iul_entries(
