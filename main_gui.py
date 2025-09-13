@@ -184,7 +184,7 @@ class App(tk.Tk):
         body.rowconfigure(8, weight=1)
 
     def _show_instruction(self):
-        """Показывает инструкцию: окно выплывает справа и поддерживает прокрутку."""
+        """Показывает краткую инструкцию: окно выплывает справа и поддерживает прокрутку."""
         instr_path = Path(__file__).with_name("INSTRUCTION.md")
         try:
             text = instr_path.read_text(encoding="utf-8")
