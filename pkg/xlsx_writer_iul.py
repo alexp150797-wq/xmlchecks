@@ -7,9 +7,9 @@ from openpyxl import Workbook
 from .xlsx_utils import autosize, apply_borders, style_sheet, add_summary_sheet
 
 BASE_HEADERS = [
-    "Имя файла",
+    "Имя файла IFC",
     "Имя PDF",
-    "Файл из ИУЛ",
+    "Имя файла IFC из ИУЛ",
     "CRC-32 ИУЛ",
     "CRC-32 IFC",
     "Дата/время ИУЛ",
@@ -48,9 +48,9 @@ def write_xlsx_iul(
     ws.append(headers)
     for r in rows:
         row_data = [
-            r.get("Имя файла"),
+            r.get("Имя файла IFC"),
             r.get("Имя PDF"),
-            r.get("Файл из ИУЛ"),
+            r.get("Имя файла IFC из ИУЛ"),
             r.get("CRC-32 ИУЛ"),
             r.get("CRC-32 IFC"),
             r.get("Дата/время ИУЛ"),

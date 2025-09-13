@@ -17,6 +17,8 @@ from pkg.report_builder_pdf_xml import build_report_pdf_xml
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_combined import write_combined_xlsx
+import socket
+import threading
 
 APP_TITLE = "IFC CRC Checker — GUI"
 # slightly wider for better layout
@@ -76,6 +78,8 @@ class App(tk.Tk):
         self.var_pdf_label = tk.StringVar(value="(не выбрано)")
         self.var_pdf_dir = tk.StringVar()
         self.var_recursive_pdf_other = tk.BooleanVar(value=True)
+
+        self._instr_panel = None
 
         self._build_ui()
 
@@ -183,19 +187,35 @@ class App(tk.Tk):
         body.rowconfigure(8, weight=1)
 
     def _show_instruction(self):
-        """Открывает окно с краткой инструкцией."""
+        """Показывает инструкцию в выезжающей панели."""
+        if self._instr_panel is not None:
+            self._instr_panel.destroy()
+            self._instr_panel = None
+            return
         instr_path = Path(__file__).with_name("INSTRUCTION.md")
         try:
             text = instr_path.read_text(encoding="utf-8")
         except Exception:
             text = "Файл инструкции не найден."
-        win = tk.Toplevel(self)
-        win.title("Инструкция")
-        win.geometry("600x400")
-        txt = tk.Text(win, wrap="word")
+        panel_width = 400
+        panel = tk.Frame(self, width=panel_width, height=self.winfo_height())
+        panel.place(x=self.winfo_width(), y=0, relheight=1)
+        txt = tk.Text(panel, wrap="word")
+        scroll = ttk.Scrollbar(panel, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=scroll.set)
         txt.insert("1.0", text)
         txt.config(state="disabled")
-        txt.pack(fill="both", expand=True)
+        txt.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self._instr_panel = panel
+
+        def slide():
+            x = panel.winfo_x()
+            target = self.winfo_width() - panel_width
+            if x > target:
+                panel.place(x=max(x-20, target), y=0, relheight=1)
+                panel.after(10, slide)
+        slide()
 
     def _choose_xml(self):
         p = filedialog.askopenfilename(title="Выберите XML", filetypes=[("XML","*.xml"),("Все файлы","*.*")])
@@ -407,7 +427,7 @@ class App(tk.Tk):
                     rows_xml = build_report(xml_map, files_ifc, case_sensitive=True)
                     for r in rows_xml:
                         status = r.get("Статус","")
-                        name = r.get("Имя файла")
+                        name = r.get("Имя файла IFC")
                         if status == "OK":
                             self._log(f"{EMOJI['ok']} OK(XML) — {name}", "ok")
                         else:
@@ -428,7 +448,7 @@ class App(tk.Tk):
                     rows_pdf = build_report_pdf_xml(xml_pdf_map, pdfs, case_sensitive=True)
                     for r in rows_pdf:
                         status = r.get("Статус","")
-                        name = r.get("Имя файла")
+                        name = r.get("Имя файла IFC")
                         if status == "OK":
                             self._log(f"{EMOJI['ok']} OK(PDF/XML) — {name}", "ok")
                         else:
@@ -453,12 +473,13 @@ class App(tk.Tk):
                         rows_iul = build_report_iul(
                             iul_map,
                             files_ifc,
+                            iul_pdfs,
                             strict_pdf_name=bool(self.var_pdf_name_strict.get()),
                             include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
                         )
                         for r in rows_iul:
                             status = r.get("Статус","")
-                            name = r.get("Имя файла")
+                            name = r.get("Имя файла IFC")
                             if status == "OK":
                                 self._log(f"{EMOJI['ok']} OK(IUL) — {name}", "ok")
                             else:
@@ -510,5 +531,33 @@ class App(tk.Tk):
         finally:
             self.progress.stop()
 
+PORT = 65432
+
+
+def _acquire_instance(app: App) -> bool:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", PORT))
+    except OSError:
+        try:
+            with socket.create_connection(("127.0.0.1", PORT), timeout=1) as s:
+                s.send(b"show")
+        except OSError:
+            pass
+        return False
+    sock.listen(1)
+
+    def server():
+        while True:
+            conn, _ = sock.accept()
+            conn.close()
+            app.after(0, lambda: (app.deiconify(), app.lift(), app.focus_force()))
+
+    threading.Thread(target=server, daemon=True).start()
+    return True
+
+
 if __name__ == "__main__":
-    App().mainloop()
+    app = App()
+    if _acquire_instance(app):
+        app.mainloop()

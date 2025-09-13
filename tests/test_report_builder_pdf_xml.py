@@ -11,4 +11,4 @@ def test_crc_field_filled_on_name_mismatch(tmp_path):
     row = rows[0]
     assert row["Статус"] == "NAME_MISMATCH"
     assert row["CRC-32 XML"] == crc
-    assert row["Файл из XML"] == "other.pdf"
+    assert row["Имя файла IFC из XML"] == "other.pdf"

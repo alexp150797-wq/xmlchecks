@@ -1,10 +1,10 @@
 """Build Windows executables using PyInstaller.
 
-This script creates two standalone executables for the CLI and GUI entry
-points. PyInstaller must be installed in the active environment.
+This script creates a standalone executable for the GUI entry
+point. PyInstaller must be installed in the active environment.
 Run on Windows:
     python build_exe.py
-The built binaries will appear in the ``dist`` directory.
+The built binary will appear in the project root directory.
 """
 from __future__ import annotations
 
@@ -31,6 +31,8 @@ def _build(target: str, *, windowed: bool, name: str) -> None:
         "--onefile",
         "--name",
         name,
+        "--distpath",
+        str(ROOT),
     ]
     if windowed:
         opts.append("--windowed")
@@ -43,8 +45,7 @@ def _build(target: str, *, windowed: bool, name: str) -> None:
 
 
 def main() -> None:
-    _build("main_cli.py", windowed=False, name="xmlchecks_cli")
-    _build("main_gui.py", windowed=True, name="xmlchecks_gui")
+    _build("main_gui.py", windowed=True, name="IFCChecks")
 
 
 if __name__ == "__main__":
