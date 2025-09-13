@@ -2,26 +2,17 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
+
 from .crc import compute_crc32
-from .utils import tri, recommendation
+from .utils import tri
 
-
-RECOMMENDATIONS = {
-    "OK": "Действий не требуется",
-    "ERROR_IFC_EXTRA": "Удалите лишний файл или добавьте запись в XML",
-    "ERROR_XML_EXTRA": "Удалите лишнюю запись из XML или добавьте соответствующий файл IFC",
-    "CRC_MISMATCH": "Проверьте корректность файлов и пересоздайте CRC",
-    "NAME_MISMATCH": "Переименуйте файл или исправьте запись в XML",
-}
-
-def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive: bool=True) -> List[Dict]:
-    """
-    Сравнение XML↔IFC:
+def build_report_pdf_xml(xml_map: Dict[str, dict], pdf_files: List[Path], case_sensitive: bool = True) -> List[Dict]:
+    """Сравнение XML↔PDF:
       - Имя (строгое сравнение)
       - CRC-32
     Сценарии:
-      - IFC есть, записи в XML нет → ERROR_IFC_EXTRA
-      - Запись в XML есть, IFC не найден → ERROR_XML_EXTRA
+      - PDF есть, записи в XML нет → ERROR_PDF_EXTRA
+      - Запись в XML есть, PDF не найден → ERROR_XML_EXTRA
       - CRC разные → CRC_MISMATCH
       - Есть совпадение по CRC, но имя отличается → NAME_MISMATCH (в одну строку)
       - Всё ок → OK
@@ -36,7 +27,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
         if crc:
             xml_crc_index.setdefault(crc, []).append(name)
 
-    for f in ifc_files:
+    for f in pdf_files:
         base = f.name
         key = base if case_sensitive else base.lower()
         meta = xml_map.get(key)
@@ -47,6 +38,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
         status: List[str] = []
         details: List[str] = []
         xml_name_from_xml = base if meta else None
+        meta_matched = meta
 
         if meta is None:
             # пытаемся сопоставить по CRC
@@ -54,6 +46,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
             if len(hits) == 1:
                 xml_name = hits[0]
                 xml_name_from_xml = xml_name
+                meta_matched = xml_map.get(xml_name)
                 used_xml.add(xml_name if case_sensitive else xml_name.lower())
                 name_match = (xml_name == base)
                 if not name_match:
@@ -61,10 +54,10 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
                     details.append("Сопоставлено по CRC-32, имя различается")
                 crc_match = True
             elif len(hits) > 1:
-                status.append("ERROR_IFC_EXTRA")
+                status.append("ERROR_PDF_EXTRA")
                 details.append(f"Найдено несколько записей в XML с тем же CRC ({actual_crc_hex})")
             else:
-                status.append("ERROR_IFC_EXTRA")
+                status.append("ERROR_PDF_EXTRA")
                 details.append("Файл есть, но отсутствует запись в XML")
         else:
             used_xml.add(key)
@@ -74,7 +67,7 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
                 crc_match = (xml_crc == actual_crc_hex)
                 if not crc_match:
                     status.append("CRC_MISMATCH")
-                    details.append(f"CRC-32 не совпадает: XML={xml_crc}, IFC={actual_crc_hex}")
+                    details.append(f"CRC-32 не совпадает: XML={xml_crc}, PDF={actual_crc_hex}")
             else:
                 details.append("В XML отсутствует CRC-32")
 
@@ -84,13 +77,12 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
         rows.append({
             "Имя файла": base,
             "Файл из XML": xml_name_from_xml,
-            "CRC-32 XML": ((meta.get('crc_hex') or '').upper() if meta else None),
-            "CRC-32 IFC": actual_crc_hex,
+            "CRC-32 XML": ((meta_matched.get('crc_hex') or '').upper() if meta_matched else None),
+            "CRC-32 PDF": actual_crc_hex,
             "Имя совпадает": tri(name_match),
             "CRC совпадает": tri(crc_match),
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
-            "recommendation": recommendation(status, RECOMMENDATIONS),
         })
 
     # Лишние записи в XML
@@ -102,12 +94,11 @@ def build_report(xml_map: Dict[str, dict], ifc_files: List[Path], case_sensitive
             "Имя файла": None,
             "Файл из XML": name,
             "CRC-32 XML": (meta.get("crc_hex") or "").upper() or None,
-            "CRC-32 IFC": None,
+            "CRC-32 PDF": None,
             "Имя совпадает": "—",
             "CRC совпадает": "—",
             "Статус": "ERROR_XML_EXTRA",
             "Подробности": "Запись в XML есть, соответствующий файл не найден",
-            "recommendation": RECOMMENDATIONS.get("ERROR_XML_EXTRA"),
         })
 
     return rows

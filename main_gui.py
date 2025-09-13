@@ -13,19 +13,20 @@ from tkinter import ttk, filedialog, messagebox
 from pkg.xml_reader import read_rules, extract_from_xml
 from pkg.scanner import collect_ifc_files, collect_pdf_files
 from pkg.report_builder import build_report
-from pkg.xlsx_writer import write_xlsx
-
+from pkg.report_builder_pdf_xml import build_report_pdf_xml
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
-from pkg.xlsx_writer_iul import write_xlsx_iul
+from pkg.xlsx_writer_combined import write_combined_xlsx
 
 APP_TITLE = "IFC CRC Checker — GUI"
-APP_MIN_W, APP_MIN_H = 980, 760
+# slightly wider to fit buttons and locked size
+APP_MIN_W, APP_MIN_H = 1080, 800
 
 EMOJI = {
     "xml": "🧾",
     "ifc": "🏗️",
     "iul": "📄",
+    "pdf": "📄",
     "search": "🔎",
     "xlsx": "📊",
     "done": "✅",
@@ -43,10 +44,16 @@ class App(tk.Tk):
         self.title(APP_TITLE)
         self.minsize(APP_MIN_W, APP_MIN_H)
         self.geometry(f"{APP_MIN_W}x{APP_MIN_H}")
+        self.resizable(False, False)
         self._apply_theme()
+
+        # store critical error messages for optional log saving
+        self.error_messages: list[str] = []
 
         # Paths & options
         self.var_xml = tk.StringVar()
+        self.ifc_files: list[Path] = []
+        self.var_ifc_label = tk.StringVar(value="(не выбрано)")
         self.var_ifc_dir = tk.StringVar()
         self.var_out = tk.StringVar(value=str(Path.cwd() / "ifc_crc_report.xlsx"))
         self.var_recursive_ifc = tk.BooleanVar(value=True)
@@ -55,6 +62,7 @@ class App(tk.Tk):
         # Checks: independently
         self.var_check_xml = tk.BooleanVar(value=True)
         self.var_check_iul = tk.BooleanVar(value=True)
+        self.var_check_pdf_xml = tk.BooleanVar(value=False)
 
         # IUL selection
         self.iul_files: list[Path] = []
@@ -62,6 +70,12 @@ class App(tk.Tk):
         self.var_iul_dir = tk.StringVar()
         self.var_recursive_pdf = tk.BooleanVar(value=True)
         self.var_pdf_name_strict = tk.BooleanVar(value=False)  # строгое имя PDF (_УЛ)
+
+        # Generic PDF selection for PDF↔XML
+        self.pdf_files: list[Path] = []
+        self.var_pdf_label = tk.StringVar(value="(не выбрано)")
+        self.var_pdf_dir = tk.StringVar()
+        self.var_recursive_pdf_other = tk.BooleanVar(value=True)
 
         self._build_ui()
 
@@ -71,61 +85,82 @@ class App(tk.Tk):
             self.style.theme_use("clam")
         except Exception:
             pass
+        bg = "#f5f5f5"
+        self.configure(background=bg)
+        self.style.configure("TFrame", background=bg)
+        self.style.configure("TLabel", background=bg, padding=2)
+        self.style.configure("TCheckbutton", background=bg)
         self.style.configure("TButton", padding=8)
-        self.style.configure("TLabel", padding=2)
-        self.style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"))
-        self.style.configure("Small.TLabel", foreground="#666")
-        self.style.configure("Accent.TButton", padding=10)
-        self.style.map("Accent.TButton", background=[("active", "#007ACC")])
+        self.style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"), background="#4a90e2", foreground="white", padding=4)
+        self.style.configure("Small.TLabel", foreground="#333", background="#4a90e2")
+        self.style.configure("Accent.TButton", padding=10, background="#4a90e2", foreground="white")
+        self.style.map("Accent.TButton", background=[("active", "#3572a5")])
 
     def _build_ui(self):
         pad = {"padx": 12, "pady": 8}
 
-        header = ttk.Frame(self)
+        header = tk.Frame(self, bg="#4a90e2")
         header.pack(fill="x")
         ttk.Label(header, text="Сверка: XML↔IFC и ИУЛ(PDF)↔IFC → XLSX", style="Header.TLabel").pack(side="left", **pad)
         ttk.Label(header, text="Зелёный — успех, красный — ошибка. Сравнение имён всегда строгое.", style="Small.TLabel").pack(side="right", **pad)
 
         body = ttk.Frame(self); body.pack(fill="both", expand=True, padx=10, pady=6)
 
-        # What to check
-        box = ttk.LabelFrame(body, text="Что проверять")
-        box.grid(row=0, column=0, columnspan=3, sticky="we", **pad)
-        ttk.Checkbutton(box, text="XML ↔ IFC", variable=self.var_check_xml).grid(row=0, column=0, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(box, text="ИУЛ (PDF) ↔ IFC", variable=self.var_check_iul).grid(row=0, column=1, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(box, text="Открыть отчёты по завершению", variable=self.var_open_after).grid(row=0, column=2, sticky="w", padx=8, pady=4)
+        # What to check (split)
+        box_ifc = ttk.LabelFrame(body, text="Проверки к IFC")
+        box_ifc.grid(row=0, column=0, columnspan=2, sticky="we", **pad)
+        ttk.Checkbutton(box_ifc, text="XML ↔ IFC", variable=self.var_check_xml).grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(box_ifc, text="ИУЛ (PDF) ↔ IFC", variable=self.var_check_iul).grid(row=0, column=1, sticky="w", padx=8, pady=4)
+
+        box_pdf = ttk.LabelFrame(body, text="Проверки к PDF")
+        box_pdf.grid(row=0, column=2, columnspan=2, sticky="we", **pad)
+        ttk.Checkbutton(box_pdf, text="PDF ↔ XML", variable=self.var_check_pdf_xml).grid(row=0, column=0, sticky="w", padx=8, pady=4)
 
         # XML
         ttk.Label(body, text=f"{EMOJI['xml']} XML:").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Entry(body, textvariable=self.var_xml).grid(row=1, column=1, sticky="ew", **pad)
-        ttk.Button(body, text="Файл...", command=self._choose_xml).grid(row=1, column=2, **pad)
+        ttk.Entry(body, textvariable=self.var_xml).grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
+        ttk.Button(body, text="Файл...", command=self._choose_xml).grid(row=1, column=3, **pad)
 
-        # IFC dir
-        ttk.Label(body, text=f"{EMOJI['ifc']} Папка с IFC:").grid(row=2, column=0, sticky="w", **pad)
-        ttk.Entry(body, textvariable=self.var_ifc_dir).grid(row=2, column=1, sticky="ew", **pad)
-        ttk.Button(body, text="Выбрать...", command=self._choose_ifc_dir).grid(row=2, column=2, **pad)
-        ttk.Checkbutton(body, text="Рекурсивно по IFC", variable=self.var_recursive_ifc).grid(row=2, column=3, sticky="w", padx=6)
+        # IFC selection
+        ifc_frame = ttk.LabelFrame(body, text="IFC")
+        ifc_frame.grid(row=2, column=0, columnspan=2, sticky="we", padx=10, pady=6)
+        ttk.Label(ifc_frame, text=f"{EMOJI['ifc']} Выбор:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        ttk.Button(ifc_frame, text="IFC-файлы...", command=self._choose_ifc_files).grid(row=0, column=1, padx=6, pady=4)
+        ttk.Button(ifc_frame, text="Папка с IFC...", command=self._choose_ifc_dir).grid(row=0, column=2, padx=6, pady=4)
+        ttk.Label(ifc_frame, textvariable=self.var_ifc_label).grid(row=0, column=3, sticky="w", padx=8, pady=4)
+        ttk.Checkbutton(ifc_frame, text="Рекурсивно по IFC", variable=self.var_recursive_ifc).grid(row=0, column=4, sticky="w", padx=6)
+        ttk.Button(ifc_frame, text="Очистить выбор IFC", command=self._clear_ifc).grid(row=1, column=2, padx=6, pady=4)
 
         # IUL PDFs
         iul_frame = ttk.LabelFrame(body, text="ИУЛ (PDF)")
-        iul_frame.grid(row=3, column=0, columnspan=4, sticky="we", padx=10, pady=6)
+        iul_frame.grid(row=3, column=0, columnspan=2, sticky="we", padx=10, pady=6)
         ttk.Label(iul_frame, text=f"{EMOJI['iul']} Выбор:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
         ttk.Button(iul_frame, text="PDF-файлы...", command=self._choose_iul_files).grid(row=0, column=1, padx=6, pady=4)
         ttk.Button(iul_frame, text="Папка с PDF...", command=self._choose_iul_dir).grid(row=0, column=2, padx=6, pady=4)
         ttk.Label(iul_frame, textvariable=self.var_iul_label).grid(row=0, column=3, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(iul_frame, text="Рекурсивно по PDF", variable=self.var_recursive_pdf).grid(row=0, column=4, sticky="w", padx=6)
-
-        ttk.Checkbutton(iul_frame, text="Строгое имя PDF (…_УЛ.pdf)", variable=self.var_pdf_name_strict).grid(row=1, column=1, sticky="w", padx=6, pady=4)
+        ttk.Checkbutton(iul_frame, text="Рекурсивно", variable=self.var_recursive_pdf).grid(row=1, column=0, sticky="w", padx=8)
+        ttk.Checkbutton(iul_frame, text="Строгое имя PDF (имяIFC_УЛ.pdf)", variable=self.var_pdf_name_strict).grid(row=1, column=1, sticky="w", padx=6, pady=4)
         ttk.Button(iul_frame, text="Очистить выбор PDF", command=self._clear_iul).grid(row=1, column=2, padx=6, pady=4)
 
+        # Generic PDFs for PDF↔XML
+        pdf_frame = ttk.LabelFrame(body, text="PDF")
+        pdf_frame.grid(row=2, column=2, columnspan=2, rowspan=2, sticky="we", padx=10, pady=6)
+        ttk.Label(pdf_frame, text=f"{EMOJI['pdf']} Выбор:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        ttk.Button(pdf_frame, text="PDF-файлы...", command=self._choose_pdf_files).grid(row=0, column=1, padx=6, pady=4)
+        ttk.Button(pdf_frame, text="Папка с PDF...", command=self._choose_pdf_dir).grid(row=0, column=2, padx=6, pady=4)
+        ttk.Label(pdf_frame, textvariable=self.var_pdf_label).grid(row=0, column=3, sticky="w", padx=8, pady=4)
+        ttk.Button(pdf_frame, text="Очистить выбор PDF", command=self._clear_pdf).grid(row=1, column=2, padx=6, pady=4)
+        ttk.Checkbutton(pdf_frame, text="Рекурсивно", variable=self.var_recursive_pdf_other).grid(row=1, column=0, sticky="w", padx=8)
+
         # Out
-        ttk.Label(body, text=f"{EMOJI['xlsx']} Отчёт (XML):").grid(row=4, column=0, sticky="w", **pad)
-        ttk.Entry(body, textvariable=self.var_out).grid(row=4, column=1, sticky="ew", **pad)
-        ttk.Button(body, text="Сохранить как...", command=self._choose_out).grid(row=4, column=2, **pad)
+        ttk.Label(body, text=f"{EMOJI['xlsx']} Отчёт (XLSX):").grid(row=4, column=0, sticky="w", **pad)
+        ttk.Entry(body, textvariable=self.var_out).grid(row=4, column=1, columnspan=2, sticky="ew", **pad)
+        ttk.Button(body, text="Сохранить как...", command=self._choose_out).grid(row=4, column=3, **pad)
 
         # Run
         btns = ttk.Frame(body); btns.grid(row=5, column=0, columnspan=4, sticky="w", **pad)
         ttk.Button(btns, text=f"{EMOJI['search']} Сформировать отчёт(ы)", style="Accent.TButton", command=self._run).pack(side="left", padx=6)
+        ttk.Checkbutton(btns, text="Открыть отчёты по завершению", variable=self.var_open_after).pack(side="left", padx=6)
         ttk.Button(btns, text="Выход", command=self.destroy).pack(side="left", padx=6)
 
         # Progress + log
@@ -143,6 +178,7 @@ class App(tk.Tk):
         self.log.tag_configure("warn", foreground="#9a6a00")
 
         body.columnconfigure(1, weight=1)
+        body.columnconfigure(2, weight=1)
         body.rowconfigure(8, weight=1)
 
     def _choose_xml(self):
@@ -152,10 +188,32 @@ class App(tk.Tk):
             if not self.var_out.get():
                 self.var_out.set(str(Path(p).with_name("ifc_crc_report.xlsx")))
 
+    def _choose_ifc_files(self):
+        ps = filedialog.askopenfilenames(title="Выберите IFC", filetypes=[("IFC","*.ifc")])
+        if ps:
+            self.ifc_files = [Path(p) for p in ps]
+            self._update_ifc_label()
+        else:
+            self._update_ifc_label()
+
     def _choose_ifc_dir(self):
         p = filedialog.askdirectory(title="Выберите папку с IFC")
         if p:
             self.var_ifc_dir.set(p)
+            self._update_ifc_label()
+
+    def _clear_ifc(self):
+        self.ifc_files = []
+        self.var_ifc_dir.set("")
+        self._update_ifc_label()
+
+    def _update_ifc_label(self):
+        parts = []
+        if self.ifc_files:
+            parts.append(f"файлов: {len(self.ifc_files)}")
+        if self.var_ifc_dir.get():
+            parts.append(f"папка: {self.var_ifc_dir.get()}")
+        self.var_ifc_label.set(", ".join(parts) if parts else "(не выбрано)")
 
     def _choose_iul_files(self):
         ps = filedialog.askopenfilenames(title="Выберите ИУЛ (PDF)", filetypes=[("PDF","*.pdf")])
@@ -184,9 +242,36 @@ class App(tk.Tk):
             parts.append(f"папка: {self.var_iul_dir.get()}")
         self.var_iul_label.set(", ".join(parts) if parts else "(не выбрано)")
 
+    def _choose_pdf_files(self):
+        ps = filedialog.askopenfilenames(title="Выберите PDF", filetypes=[("PDF","*.pdf")])
+        if ps:
+            self.pdf_files = [Path(p) for p in ps]
+            self._update_pdf_label()
+        else:
+            self._update_pdf_label()
+
+    def _choose_pdf_dir(self):
+        p = filedialog.askdirectory(title="Выберите папку с PDF")
+        if p:
+            self.var_pdf_dir.set(p)
+            self._update_pdf_label()
+
+    def _clear_pdf(self):
+        self.pdf_files = []
+        self.var_pdf_dir.set("")
+        self._update_pdf_label()
+
+    def _update_pdf_label(self):
+        parts = []
+        if self.pdf_files:
+            parts.append(f"файлов: {len(self.pdf_files)}")
+        if self.var_pdf_dir.get():
+            parts.append(f"папка: {self.var_pdf_dir.get()}")
+        self.var_pdf_label.set(", ".join(parts) if parts else "(не выбрано)")
+
     def _choose_out(self):
         p = filedialog.asksaveasfilename(
-            title="Сохранить отчёт (XML) как...",
+            title="Сохранить отчёт как...",
             defaultextension=".xlsx",
             filetypes=[("Excel Workbook","*.xlsx")],
             initialfile="ifc_crc_report.xlsx"
@@ -194,10 +279,29 @@ class App(tk.Tk):
         if p:
             self.var_out.set(p)
 
-    def _log(self, msg, kind="info"):
-        tag = "info" if kind not in ("ok","err","warn") else kind
+    def _log(self, msg, kind="info", critical: bool = False):
+        tag = "info" if kind not in ("ok", "err", "warn") else kind
+        if critical:
+            self.error_messages.append(msg)
         self.log.insert("end", msg + "\n", tag)
-        self.log.see("end"); self.update_idletasks()
+        self.log.see("end"); self.update()
+
+    def _save_error_log(self):
+        p = filedialog.asksaveasfilename(
+            title="Сохранить журнал ошибок",
+            defaultextension=".txt",
+            filetypes=[("Text", "*.txt"), ("All files", "*.*")],
+        )
+        if p:
+            try:
+                Path(p).write_text("\n".join(self.error_messages), encoding="utf-8")
+                self._log(f"{EMOJI['path']} Журнал сохранён: {p}")
+            except Exception as e:
+                self._log(f"{EMOJI['err']} Не удалось сохранить журнал: {e}", "err")
+
+    def _error_dialog(self, message: str):
+        if messagebox.askyesno("Ошибка", f"{message}\n\nСохранить журнал ошибок?"):
+            self._save_error_log()
 
     def _open_path(self, path: Path):
         try:
@@ -218,112 +322,175 @@ class App(tk.Tk):
     def _run(self):
         try:
             self.log.delete("1.0", "end")
+            self.error_messages = []
 
             check_xml = bool(self.var_check_xml.get())
             check_iul = bool(self.var_check_iul.get())
-            if not (check_xml or check_iul):
+            check_pdf_xml = bool(self.var_check_pdf_xml.get())
+            if not (check_xml or check_iul or check_pdf_xml):
                 self._log(f"{EMOJI['warn']} Ничего не выбрано для проверки.", "warn")
                 return
-
             xml = Path(self.var_xml.get()) if self.var_xml.get() else None
-            ifc_dir = Path(self.var_ifc_dir.get()) if self.var_ifc_dir.get() else None
-            out_xml = Path(self.var_out.get()) if self.var_out.get() else None
+            out_path = Path(self.var_out.get()) if self.var_out.get() else None
+            if out_path is None:
+                msg = "Путь для отчёта не указан."
+                self._log(f"{EMOJI['err']} [ОШИБКА] {msg}", "err", critical=True)
+                self._error_dialog(msg)
+                return
+            if out_path.exists() and not self._ask_overwrite(out_path):
+                self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись отчёта отменена.")
+                return
 
-            self._log(f"{EMOJI['ifc']} Папка IFC: {ifc_dir} (рекурсивно={bool(self.var_recursive_ifc.get())})")
-            if not ifc_dir or not ifc_dir.exists() or not ifc_dir.is_dir():
-                self._log(f"{EMOJI['err']} [ОШИБКА] Папка с IFC не найдена/не папка.", "err")
-                messagebox.showerror("Ошибка", "Папка с IFC не найдена/не папка.")
-                return
-            files_ifc = collect_ifc_files(ifc_dir, recursive=bool(self.var_recursive_ifc.get()))
-            self._log(f"    Найдено IFC: {len(files_ifc)}")
-            if not files_ifc:
-                self._log(f"{EMOJI['err']} [ОШИБКА] В папке отсутствуют файлы *.ifc", "err")
-                messagebox.showerror("Ошибка", "В папке не найдено файлов *.ifc")
-                return
+            files_ifc: list[Path] = []
+            if check_xml or check_iul:
+                files_ifc = list(self.ifc_files)
+                if self.var_ifc_dir.get():
+                    files_ifc.extend(collect_ifc_files(Path(self.var_ifc_dir.get()), recursive=bool(self.var_recursive_ifc.get())))
+                files_ifc = sorted({p.resolve() for p in files_ifc})
+                self._log(f"{EMOJI['ifc']} Выбрано IFC: {len(files_ifc)}")
+                if not files_ifc:
+                    msg = "IFC не выбраны/не найдены."
+                    self._log(f"{EMOJI['err']} [ОШИБКА] {msg}", "err", critical=True)
+                    self._error_dialog("Не выбраны файлы IFC")
+                    return
+
+            iul_pdfs: list[Path] = []
+            if check_iul:
+                iul_pdfs = list(self.iul_files)
+                if self.var_iul_dir.get():
+                    iul_pdfs.extend(collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get())))
+                iul_pdfs = sorted({p.resolve() for p in iul_pdfs})
+                self._log(f"{EMOJI['iul']} Выбрано ИУЛ PDF: {len(iul_pdfs)}")
+
+            pdfs: list[Path] = []
+            if check_pdf_xml:
+                pdfs = list(self.pdf_files)
+                if self.var_pdf_dir.get():
+                    pdfs.extend(collect_pdf_files(Path(self.var_pdf_dir.get()), recursive=bool(self.var_recursive_pdf_other.get())))
+                pdfs = sorted({p.resolve() for p in pdfs})
+                self._log(f"{EMOJI['pdf']} Выбрано PDF: {len(pdfs)}")
+
+            rows_xml: list[dict] = []
+            rows_iul: list[dict] = []
+            rows_pdf: list[dict] = []
 
             self.progress.start(12)
+            self.update()
 
-            # --- XML report ---
             if check_xml:
                 if not xml or not xml.exists():
                     self._log(f"{EMOJI['err']} [ОШИБКА] XML не указан или не найден.", "err")
-                elif not out_xml:
-                    self._log(f"{EMOJI['err']} [ОШИБКА] Путь для XML-отчёта не указан.", "err")
                 else:
-                    if out_xml.exists() and not self._ask_overwrite(out_xml):
-                        self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись XML-отчёта отменена.")
-                    else:
-                        self._log(f"{EMOJI['xml']} Чтение XML...")
-                        rules = read_rules(Path(__file__).with_name("rules.yaml"))
-                        xml_map = extract_from_xml(xml, rules, case_sensitive=True)
-                        self._log(f"    Записей IFC в XML: {len(xml_map)}")
+                    self._log(f"{EMOJI['xml']} Чтение XML...")
+                    rules = read_rules(Path(__file__).with_name("rules.yaml"))
+                    xml_map, xml_pdf = extract_from_xml(
+                        xml, rules, case_sensitive=True, include_sign_files=True
+                    )
+                    self._log(f"    Записей IFC в XML: {len(xml_map)} | Подписей PDF: {len(xml_pdf)}")
+                    self._log(f"{EMOJI['search']} Сверка по XML...")
+                    rows_xml = build_report(xml_map, files_ifc, case_sensitive=True)
+                    for r in rows_xml:
+                        status = r.get("Статус","")
+                        name = r.get("Имя файла")
+                        if status == "OK":
+                            self._log(f"{EMOJI['ok']} OK(XML) — {name}", "ok")
+                        else:
+                            self._log(f"{EMOJI['err']} {status}(XML) — {name} | {r.get('Подробности','')}", "err")
 
-                        self._log(f"{EMOJI['search']} Сверка по XML...")
-                        rows_xml = build_report(xml_map, files_ifc, case_sensitive=True)
-                        for r in rows_xml:
+            if check_pdf_xml:
+                if not xml or not xml.exists():
+                    self._log(f"{EMOJI['err']} [ОШИБКА] XML не указан или не найден для PDF↔XML.", "err")
+                elif not pdfs:
+                    self._log(f"{EMOJI['warn']} PDF↔XML включена, но PDF не выбраны/не найдены.", "warn")
+                else:
+                    self._log(f"{EMOJI['xml']} Чтение XML (PDF)...")
+                    rules_pdf = read_rules(Path(__file__).with_name("rules.yaml"))
+                    rules_pdf["filter_format"] = "PDF"
+                    xml_pdf_map = extract_from_xml(xml, rules_pdf, case_sensitive=True)
+                    self._log(f"    Записей PDF в XML: {len(xml_pdf_map)}")
+                    self._log(f"{EMOJI['search']} Сверка PDF↔XML...")
+                    rows_pdf = build_report_pdf_xml(xml_pdf_map, pdfs, case_sensitive=True)
+                    for r in rows_pdf:
+                        status = r.get("Статус","")
+                        name = r.get("Имя файла")
+                        if status == "OK":
+                            self._log(f"{EMOJI['ok']} OK(PDF/XML) — {name}", "ok")
+                        else:
+                            self._log(f"{EMOJI['err']} {status}(PDF/XML) — {name} | {r.get('Подробности','')}", "err")
+
+            if check_iul:
+                if not iul_pdfs:
+                    self._log(f"{EMOJI['warn']} ИУЛ-проверка включена, но PDF не выбраны/не найдены.", "warn")
+                else:
+                    if PdfReader is None:
+                        self._log(f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.", "err")
+                    else:
+                        self._log(f"{EMOJI['iul']} Чтение ИУЛ (PDF)...")
+                        iul_map = extract_iul_entries(
+                            iul_pdfs,
+                            progress=lambda e: self._log(f"    {e.basename} ← {e.source_pdf}"),
+                        )
+                        self._log(f"    Извлечено записей из ИУЛ: {len(iul_map)}")
+                        self._log(
+                            f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})"
+                        )
+                        rows_iul = build_report_iul(
+                            iul_map,
+                            files_ifc,
+                            strict_pdf_name=bool(self.var_pdf_name_strict.get()),
+                            include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
+                        )
+                        for r in rows_iul:
                             status = r.get("Статус","")
                             name = r.get("Имя файла")
                             if status == "OK":
-                                self._log(f"{EMOJI['ok']} OK(XML) — {name}", "ok")
+                                self._log(f"{EMOJI['ok']} OK(IUL) — {name}", "ok")
                             else:
-                                self._log(f"{EMOJI['err']} {status}(XML) — {name} | {r.get('Подробности','')}", "err")
+                                self._log(f"{EMOJI['err']} {status}(IUL) — {name} | {r.get('Подробности','')}", "err")
 
-                        self._log(f"{EMOJI['xlsx']} Формирование XLSX (XML)...")
-                        exit_xml, stats_xml = write_xlsx(rows_xml, out_xml)
-                        self._log(f"{EMOJI['stats']} [ИТОГИ XML] Всего: {stats_xml.get('total')} | OK: {stats_xml.get('ok')} | Ошибок: {stats_xml.get('errors')}")
-                        if self.var_open_after.get():
-                            self._open_path(out_xml)
+            while True:
+                try:
+                    stats = write_combined_xlsx(
+                        rows_xml if check_xml else None,
+                        rows_iul if check_iul else None,
+                        rows_pdf if check_pdf_xml else None,
+                        out_path,
+                        include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
+                    )
+                    break
+                except PermissionError:
+                    msg = f"Не удалось записать отчёт (возможно открыт): {out_path}"
+                    self._log(f"{EMOJI['err']} [ОШИБКА] {msg}", "err", critical=True)
+                    if not messagebox.askretrycancel(
+                        "Файл занят",
+                        f"Не удалось записать файл:\n{out_path}\nЗакройте файл и повторите.",
+                    ):
+                        self._log(
+                            f"{EMOJI['report']} [ОТМЕНЕНО] Запись отчёта отменена.",
+                            "warn",
+                        )
+                        self._error_dialog(msg)
+                        return
 
-            # --- IUL report ---
-            if check_iul:
-                pdfs = list(self.iul_files)
-                if self.var_iul_dir.get():
-                    pdfs_dir = collect_pdf_files(Path(self.var_iul_dir.get()), recursive=bool(self.var_recursive_pdf.get()))
-                    pdfs.extend(pdfs_dir)
-                seen = set(); uniq = []
-                for p in pdfs:
-                    s = str(Path(p).resolve())
-                    if s not in seen:
-                        seen.add(s); uniq.append(Path(p))
-                pdfs = uniq
+            if check_xml and stats.get("xml"):
+                s = stats["xml"]
+                self._log(f"{EMOJI['stats']} [ИТОГИ XML] Всего: {s.get('total')} | OK: {s.get('ok')} | Ошибок: {s.get('errors')}")
+            if check_iul and stats.get("iul"):
+                s = stats["iul"]
+                self._log(f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {s.get('total')} | OK: {s.get('ok')} | Ошибок: {s.get('errors')}")
+            if check_pdf_xml and stats.get("pdf_xml"):
+                s = stats["pdf_xml"]
+                self._log(f"{EMOJI['stats']} [ИТОГИ PDF/XML] Всего: {s.get('total')} | OK: {s.get('ok')} | Ошибок: {s.get('errors')}")
 
-                if not pdfs:
-                    self._log(f"{EMOJI['warn']} ИУЛ-проверка включена, но PDF не выбраны/не найдены.", "warn")
-                else:
-                    out_iul = (out_xml.with_name(out_xml.stem.replace('.xlsx','') + "_iul.xlsx")
-                               if (out_xml and out_xml.suffix.lower()==".xlsx")
-                               else (Path.cwd() / "ifc_crc_report_iul.xlsx"))
-                    if out_iul.exists() and not self._ask_overwrite(out_iul):
-                        self._log(f"{EMOJI['report']} [ОТМЕНЕНО] Перезапись IUL-отчёта отменена.")
-                    else:
-                        if PdfReader is None:
-                            self._log(f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.", "err")
-                        else:
-                            self._log(f"{EMOJI['iul']} Чтение ИУЛ (PDF)...")
-                            iul_map = extract_iul_entries(pdfs)
-                            self._log(f"    Извлечено записей из ИУЛ: {len(iul_map)}")
-
-                            self._log(f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})")
-                            rows_iul = build_report_iul(iul_map, files_ifc, strict_pdf_name=bool(self.var_pdf_name_strict.get()))
-                            for r in rows_iul:
-                                status = r.get("Статус","")
-                                name = r.get("Имя файла")
-                                if status == "OK":
-                                    self._log(f"{EMOJI['ok']} OK(IUL) — {name}", "ok")
-                                else:
-                                    self._log(f"{EMOJI['err']} {status}(IUL) — {name} | {r.get('Подробности','')}", "err")
-
-                            self._log(f"{EMOJI['xlsx']} Формирование XLSX (IUL)...")
-                            exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
-                            self._log(f"{EMOJI['stats']} [ИТОГИ IUL] Всего: {stats_iul.get('total')} | OK: {stats_iul.get('ok')} | Ошибок: {stats_iul.get('errors')}")
-                            if self.var_open_after.get():
-                                self._open_path(out_iul)
+            if self.var_open_after.get():
+                self._open_path(out_path)
 
             self._log(f"{EMOJI['done']} Готово.", "ok")
 
         except Exception as e:
-            self._log(f"{EMOJI['err']} [КРИТИЧЕСКАЯ ОШИБКА] {e}", "err")
-            messagebox.showerror("Критическая ошибка", str(e))
+            msg = f"[КРИТИЧЕСКАЯ ОШИБКА] {e}"
+            self._log(f"{EMOJI['err']} {msg}", "err", critical=True)
+            self._error_dialog(str(e))
         finally:
             self.progress.stop()
 

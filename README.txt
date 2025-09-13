@@ -11,6 +11,9 @@ IFC CRC Checker — полная сборка
 Установка зависимостей
     py -m pip install -r requirements.txt
 
+Зависимости для разработки и тестов
+    py -m pip install -r requirements.txt -r requirements-dev.txt
+
 Дополнительно для OCR (сканы в PDF)
 - Установите Tesseract-OCR с русским языком (rus).
 - После установки проверьте в терминале: tesseract --version
