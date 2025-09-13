@@ -16,14 +16,24 @@ RECOMMENDATIONS = {
     "NAME_MISMATCH": "Переименуйте файл или обновите запись в ИУЛ",
     "SIZE_MISMATCH": "Проверьте размер файла и обновите информацию в ИУЛ",
     "DT_MISMATCH": "Обновите дату/время в ИУЛ или замените файл",
-    "PDF_NAME_MISMATCH": "Переименуйте PDF согласно требуемому правилу",
+    "PDF_NAME_MISMATCH": "Переименуйте PDF согласно требуемому правилу (имяIFC_УЛ.pdf), где имяIFC - имя IFC файла",
 }
 
 def _fmt_mtime(ts: float) -> str:
     t = time.localtime(ts)
     return f"{t.tm_mday:02d}.{t.tm_mon:02d}.{t.tm_year:04d} {t.tm_hour:02d}:{t.tm_min:02d}"
 
-def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict_pdf_name: bool=False) -> List[Dict]:
+PDF_NAME_COL = "Имя PDF соответствует шаблону"
+
+
+def build_report_iul(
+    iul_map: Dict[str, IulEntry],
+    ifc_files: List[Path],
+    strict_pdf_name: bool = False,
+    include_pdf_name_col: bool | None = None,
+) -> List[Dict]:
+    if include_pdf_name_col is None:
+        include_pdf_name_col = strict_pdf_name
     rows: List[Dict] = []
     used = set()
 
@@ -95,13 +105,13 @@ def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict
                 pdf_name_ok = pdf_name_ok_strict(base, e.source_pdf) if strict_pdf_name else pdf_name_ok_lenient(base, e.source_pdf)
                 if not pdf_name_ok:
                     status.append("PDF_NAME_MISMATCH")
-                    rule = "строгое (_УЛ.pdf)" if strict_pdf_name else "мягкое (содержит ИУЛ и имя IFC)"
+                    rule = "строгому шаблону (имяIFC_УЛ.pdf)" if strict_pdf_name else "мягкому шаблону (содержит ИУЛ/УЛ и имя IFC)"
                     details.append(f"Имя PDF не соответствует правилу: {e.source_pdf} [{rule}]")
 
         if not status and e is not None:
             status.append("OK")
 
-        rows.append({
+        row = {
             "Имя файла": base,
             "Имя PDF": (e.source_pdf if e else None),
             "Файл из ИУЛ": (e.basename if e else None),
@@ -115,16 +125,18 @@ def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict
             "CRC совпадает": tri(crc_match),
             "Дата/время совпадает": tri(dt_match),
             "Размер совпадает": tri(size_match),
-            "Имя PDF соответствует правилу": tri(pdf_name_ok),
             "Статус": ";".join(status) if status else "—",
             "Подробности": "; ".join(details) if details else None,
             "recommendation": recommendation(status, RECOMMENDATIONS),
-        })
+        }
+        if include_pdf_name_col:
+            row[PDF_NAME_COL] = tri(pdf_name_ok)
+        rows.append(row)
 
     for k, e in iul_map.items():
         if k in used:
             continue
-        rows.append({
+        row = {
             "Имя файла": None,
             "Имя PDF": e.source_pdf,
             "Файл из ИУЛ": e.basename,
@@ -138,9 +150,11 @@ def build_report_iul(iul_map: Dict[str, IulEntry], ifc_files: List[Path], strict
             "CRC совпадает": "—",
             "Дата/время совпадает": "—",
             "Размер совпадает": "—",
-            "Имя PDF соответствует правилу": "—",
             "Статус": "ERROR_IUL_EXTRA",
             "Подробности": "Запись в ИУЛ есть, соответствующий файл не найден",
             "recommendation": RECOMMENDATIONS.get("ERROR_IUL_EXTRA"),
-        })
+        }
+        if include_pdf_name_col:
+            row[PDF_NAME_COL] = "—"
+        rows.append(row)
     return rows

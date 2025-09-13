@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 import re
 
 try:
@@ -22,10 +22,12 @@ except Exception:
     pytesseract = None
     Image = None
 
-CRC_RE  = re.compile(r'CRC[-\s_]*32\s*([0-9A-Fa-f]{8})')
-IFC_RE  = re.compile(r'([\w\-. ]+?\.ifc)', re.IGNORECASE)
-DT_RE   = re.compile(r'(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})')
-SIZE_RE = re.compile(r'Размер\s+файла\D*(\d+)', re.IGNORECASE)
+CRC_RE = re.compile(r"CRC[-\s_]*32\s*([0-9A-Fa-f]{8})")
+IFC_RE = re.compile(r"([\w\-. ]+?\.ifc)", re.IGNORECASE)
+DT_RE = re.compile(r"(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})")
+SIZE_RE = re.compile(r"Размер\s+файла\D*(\d+)", re.IGNORECASE)
+# Обособленное вхождение "УЛ" или "ИУЛ" (\s, _)
+IUL_KEYWORD_RE = re.compile(r"(^|[\s_])(ИУЛ|УЛ)([\s_]|$)")
 
 @dataclass
 class IulEntry:
@@ -75,7 +77,7 @@ def _normalize_text(txt: str) -> str:
     txt = txt.replace("\r", "\n")
     return "\n".join(ln.strip() for ln in txt.splitlines())
 
-def extract_iul_entries_from_pdf(pdf_path: Path) -> List[IulEntry]:
+def extract_iul_entries_from_pdf(pdf_path: Path, progress: Optional[Callable[[IulEntry], None]] = None) -> List[IulEntry]:
     text = _extract_text_pypdf2(pdf_path)
     if not text or len(text.strip()) < 20:
         text = _extract_text_ocr(pdf_path)
@@ -107,16 +109,29 @@ def extract_iul_entries_from_pdf(pdf_path: Path) -> List[IulEntry]:
                 if ints:
                     size = ints[-1]
 
-            entries.append(IulEntry(
-                basename=fname, crc_hex=(last_crc or None), dt_str=dt, size_bytes=size,
-                context=ln, source_pdf=pdf_path.name
-            ))
+            entry = IulEntry(
+                basename=fname,
+                crc_hex=(last_crc or None),
+                dt_str=dt,
+                size_bytes=size,
+                context=ln,
+                source_pdf=pdf_path.name,
+            )
+            entries.append(entry)
+            if progress:
+                try:
+                    progress(entry)
+                except Exception:
+                    pass
     return entries
 
-def extract_iul_entries(paths: List[Path]) -> Dict[str, IulEntry]:
+def extract_iul_entries(
+    paths: List[Path],
+    progress: Optional[Callable[[IulEntry], None]] = None,
+) -> Dict[str, IulEntry]:
     res: Dict[str, IulEntry] = {}
     for p in paths:
-        for e in extract_iul_entries_from_pdf(p):
+        for e in extract_iul_entries_from_pdf(p, progress=progress):
             key = e.basename
             if key not in res:
                 res[key] = e
@@ -127,7 +142,7 @@ def pdf_name_ok_lenient(ifc_name: str, pdf_name: str) -> bool:
     stem = Path(pdf_name).stem.upper()
     if ifc_stem not in stem:
         return False
-    return "ИУЛ" in stem
+    return bool(IUL_KEYWORD_RE.search(stem))
 
 def pdf_name_ok_strict(ifc_name: str, pdf_name: str) -> bool:
     ifc_stem = Path(ifc_name).stem.upper()

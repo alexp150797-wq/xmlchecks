@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 from openpyxl import Workbook
 
 from .xlsx_writer import HEADERS as XML_HEADERS
-from .xlsx_writer_iul import HEADERS as IUL_HEADERS
+from .xlsx_writer_iul import get_headers as get_iul_headers
 from .xlsx_writer_pdf_xml import HEADERS as PDF_XML_HEADERS
 from .xlsx_utils import autosize, apply_borders, style_sheet, add_summary_sheet
 
@@ -43,6 +43,7 @@ def write_combined_xlsx(
     iul_rows: Optional[List[Dict]],
     pdf_xml_rows: Optional[List[Dict]],
     out_path: Path,
+    include_pdf_name_col: bool = False,
 ) -> Dict[str, Dict[str, int]]:
     """Write selected reports to a single XLSX workbook.
 
@@ -65,14 +66,23 @@ def write_combined_xlsx(
         )
 
     if iul_rows:
+        headers = get_iul_headers(include_pdf_name_col)
+        if include_pdf_name_col:
+            left_cols = (1, 2, 3, 6, 7, 16, 17)
+            yes_no_cols = ("J", "K", "L", "M", "N")
+            status_col = "O"
+        else:
+            left_cols = (1, 2, 3, 6, 7, 15, 16)
+            yes_no_cols = ("J", "K", "L", "M")
+            status_col = "N"
         stats["iul"] = _add_sheet(
             wb,
             "ИУЛ - IFC",
-            IUL_HEADERS,
+            headers,
             iul_rows,
-            left_cols=(1,2,3,6,7,16,17),
-            yes_no_cols=("J","K","L","M","N"),
-            status_col="O",
+            left_cols=left_cols,
+            yes_no_cols=yes_no_cols,
+            status_col=status_col,
             summary_title="Итого ИУЛ",
         )
 

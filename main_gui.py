@@ -110,7 +110,6 @@ class App(tk.Tk):
         box_pdf = ttk.LabelFrame(body, text="Проверки к PDF")
         box_pdf.grid(row=0, column=2, columnspan=2, sticky="we", **pad)
         ttk.Checkbutton(box_pdf, text="PDF ↔ XML", variable=self.var_check_pdf_xml).grid(row=0, column=0, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(box_pdf, text="Открыть отчёты по завершению", variable=self.var_open_after).grid(row=0, column=1, sticky="w", padx=8, pady=4)
 
         # XML
         ttk.Label(body, text=f"{EMOJI['xml']} XML:").grid(row=1, column=0, sticky="w", **pad)
@@ -134,8 +133,8 @@ class App(tk.Tk):
         ttk.Button(iul_frame, text="PDF-файлы...", command=self._choose_iul_files).grid(row=0, column=1, padx=6, pady=4)
         ttk.Button(iul_frame, text="Папка с PDF...", command=self._choose_iul_dir).grid(row=0, column=2, padx=6, pady=4)
         ttk.Label(iul_frame, textvariable=self.var_iul_label).grid(row=0, column=3, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(iul_frame, text="Рекурсивно по PDF", variable=self.var_recursive_pdf).grid(row=0, column=4, sticky="w", padx=6)
-        ttk.Checkbutton(iul_frame, text="Строгое имя PDF (…_УЛ.pdf)", variable=self.var_pdf_name_strict).grid(row=1, column=1, sticky="w", padx=6, pady=4)
+        ttk.Checkbutton(iul_frame, text="Рекурсивно", variable=self.var_recursive_pdf).grid(row=1, column=0, sticky="w", padx=8)
+        ttk.Checkbutton(iul_frame, text="Строгое имя PDF (имяIFC_УЛ.pdf)", variable=self.var_pdf_name_strict).grid(row=1, column=1, sticky="w", padx=6, pady=4)
         ttk.Button(iul_frame, text="Очистить выбор PDF", command=self._clear_iul).grid(row=1, column=2, padx=6, pady=4)
 
         # Generic PDFs for PDF↔XML
@@ -145,8 +144,8 @@ class App(tk.Tk):
         ttk.Button(pdf_frame, text="PDF-файлы...", command=self._choose_pdf_files).grid(row=0, column=1, padx=6, pady=4)
         ttk.Button(pdf_frame, text="Папка с PDF...", command=self._choose_pdf_dir).grid(row=0, column=2, padx=6, pady=4)
         ttk.Label(pdf_frame, textvariable=self.var_pdf_label).grid(row=0, column=3, sticky="w", padx=8, pady=4)
-        ttk.Checkbutton(pdf_frame, text="Рекурсивно по PDF", variable=self.var_recursive_pdf_other).grid(row=0, column=4, sticky="w", padx=6)
         ttk.Button(pdf_frame, text="Очистить выбор PDF", command=self._clear_pdf).grid(row=1, column=2, padx=6, pady=4)
+        ttk.Checkbutton(pdf_frame, text="Рекурсивно", variable=self.var_recursive_pdf_other).grid(row=1, column=0, sticky="w", padx=8)
 
         # Out
         ttk.Label(body, text=f"{EMOJI['xlsx']} Отчёт (XLSX):").grid(row=4, column=0, sticky="w", **pad)
@@ -156,6 +155,7 @@ class App(tk.Tk):
         # Run
         btns = ttk.Frame(body); btns.grid(row=5, column=0, columnspan=4, sticky="w", **pad)
         ttk.Button(btns, text=f"{EMOJI['search']} Сформировать отчёт(ы)", style="Accent.TButton", command=self._run).pack(side="left", padx=6)
+        ttk.Checkbutton(btns, text="Открыть отчёты по завершению", variable=self.var_open_after).pack(side="left", padx=6)
         ttk.Button(btns, text="Выход", command=self.destroy).pack(side="left", padx=6)
 
         # Progress + log
@@ -398,10 +398,20 @@ class App(tk.Tk):
                         self._log(f"{EMOJI['err']} [ОШИБКА] Для чтения ИУЛ (PDF) требуется PyPDF2. Установите зависимости.", "err")
                     else:
                         self._log(f"{EMOJI['iul']} Чтение ИУЛ (PDF)...")
-                        iul_map = extract_iul_entries(iul_pdfs)
+                        iul_map = extract_iul_entries(
+                            iul_pdfs,
+                            progress=lambda e: self._log(f"    {e.basename} ← {e.source_pdf}"),
+                        )
                         self._log(f"    Извлечено записей из ИУЛ: {len(iul_map)}")
-                        self._log(f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})")
-                        rows_iul = build_report_iul(iul_map, files_ifc, strict_pdf_name=bool(self.var_pdf_name_strict.get()))
+                        self._log(
+                            f"{EMOJI['search']} Сверка по ИУЛ... (правило имени PDF: {'строгое' if self.var_pdf_name_strict.get() else 'мягкое'})"
+                        )
+                        rows_iul = build_report_iul(
+                            iul_map,
+                            files_ifc,
+                            strict_pdf_name=bool(self.var_pdf_name_strict.get()),
+                            include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
+                        )
                         for r in rows_iul:
                             status = r.get("Статус","")
                             name = r.get("Имя файла")
@@ -415,6 +425,7 @@ class App(tk.Tk):
                 rows_iul if check_iul else None,
                 rows_pdf if check_pdf_xml else None,
                 out_path,
+                include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
             )
 
             if check_xml and stats.get("xml"):
