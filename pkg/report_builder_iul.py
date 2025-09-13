@@ -119,7 +119,7 @@ def build_report_iul(
         expected_pdf_name = f"{Path(base).stem}_УЛ.pdf"
         row = {
             "Имя файла": base,
-            "Имя PDF": (e.source_pdf if e else expected_pdf_name),
+            "Имя PDF": (e.source_pdf if e else "Не найден"),
             "Файл из ИУЛ": (e.basename if e else None),
             "CRC-32 ИУЛ": (e.crc_hex.upper() if (e and e.crc_hex) else None),
             "CRC-32 IFC": actual_crc_hex,

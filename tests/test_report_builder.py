@@ -33,3 +33,7 @@ def test_build_report_scenarios(tmp_path):
     assert status['name_mismatch.ifc'] == 'NAME_MISMATCH'
     assert status['extra.ifc'] == 'ERROR_IFC_EXTRA'
     assert status['missing.ifc'] == 'ERROR_XML_EXTRA'
+
+    row_nm = next(r for r in rows if r['Имя файла'] == 'name_mismatch.ifc')
+    assert row_nm['CRC-32 XML'] == crc_name
+    assert row_nm['Файл из XML'] == 'other.ifc'
