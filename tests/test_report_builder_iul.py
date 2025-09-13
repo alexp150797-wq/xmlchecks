@@ -32,13 +32,13 @@ def test_build_report_iul_scenarios(tmp_path):
     crc_name, dt_name, size_name = info(name_mismatch_file)
 
     iul_map = {
-        'good.ifc': IulEntry('good.ifc', crc_good, dt_good, size_good, 'ctx', 'goodИУЛ.pdf'),
-        'crc_bad.ifc': IulEntry('crc_bad.ifc', 'FFFFFFFF', dt_crc, size_crc, 'ctx', 'crc_badИУЛ.pdf'),
-        'size_bad.ifc': IulEntry('size_bad.ifc', crc_size, dt_size, size_size + 1, 'ctx', 'size_badИУЛ.pdf'),
-        'dt_bad.ifc': IulEntry('dt_bad.ifc', crc_dt, '01.01.2000 00:00', size_dt, 'ctx', 'dt_badИУЛ.pdf'),
+        'good.ifc': IulEntry('good.ifc', crc_good, dt_good, size_good, 'ctx', 'good_ИУЛ.pdf'),
+        'crc_bad.ifc': IulEntry('crc_bad.ifc', 'FFFFFFFF', dt_crc, size_crc, 'ctx', 'crc_bad_ИУЛ.pdf'),
+        'size_bad.ifc': IulEntry('size_bad.ifc', crc_size, dt_size, size_size + 1, 'ctx', 'size_bad_ИУЛ.pdf'),
+        'dt_bad.ifc': IulEntry('dt_bad.ifc', crc_dt, '01.01.2000 00:00', size_dt, 'ctx', 'dt_bad_ИУЛ.pdf'),
         'pdf_bad.ifc': IulEntry('pdf_bad.ifc', crc_pdf, dt_pdf, size_pdf, 'ctx', 'pdf_bad.pdf'),
-        'other.ifc': IulEntry('other.ifc', crc_name, dt_name, size_name, 'ctx', 'name_mismatchИУЛ.pdf'),
-        'missing.ifc': IulEntry('missing.ifc', 'ABCDEF12', '01.01.2024 00:00', 123, 'ctx', 'missingИУЛ.pdf'),
+        'other.ifc': IulEntry('other.ifc', crc_name, dt_name, size_name, 'ctx', 'name_mismatch_ИУЛ.pdf'),
+        'missing.ifc': IulEntry('missing.ifc', 'ABCDEF12', '01.01.2024 00:00', 123, 'ctx', 'missing_ИУЛ.pdf'),
     }
 
     rows = build_report_iul(iul_map, [good, crc_bad, size_bad, dt_bad, pdf_bad, name_mismatch_file, extra])
