@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import List, Dict, Optional, Callable
 import re
@@ -61,17 +62,28 @@ def _extract_text_ocr(pdf_path: Path, dpi: int = 300) -> str:
     except Exception:
         return ""
     text_parts: List[str] = []
-    for page in doc:
-        try:
-            mat = fitz.Matrix(dpi / 72, dpi / 72)
-            pix = page.get_pixmap(matrix=mat, alpha=False)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            img = img.convert("L")  # grayscale for better OCR
-            txt = pytesseract.image_to_string(img, lang="rus+eng")
-            if txt:
-                text_parts.append(txt)
-        except Exception:
-            continue
+    try:
+        for page in doc:
+            try:
+                mat = fitz.Matrix(dpi / 72, dpi / 72)
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                img_bytes = pix.tobytes("png")
+                img = Image.open(BytesIO(img_bytes))
+                try:
+                    gray = img.convert("L")  # grayscale for better OCR
+                    txt = ""
+                    try:
+                        txt = pytesseract.image_to_string(gray, lang="rus+eng")
+                    finally:
+                        gray.close()
+                finally:
+                    img.close()
+                if txt.strip():
+                    text_parts.append(txt)
+            except Exception:
+                continue
+    finally:
+        doc.close()
     return "\n".join(text_parts)
 
 def _normalize_text(txt: str) -> str:

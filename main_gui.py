@@ -79,7 +79,10 @@ class App(tk.Tk):
         self.var_pdf_dir = tk.StringVar()
         self.var_recursive_pdf_other = tk.BooleanVar(value=True)
 
-        self._instr_panel = None
+        self._main_area = None
+        self._instr_frame = None
+        self._instr_text = None
+        self._instr_visible = False
 
         self._build_ui()
 
@@ -109,7 +112,29 @@ class App(tk.Tk):
         ttk.Label(header, text="Зелёный — успех, красный — ошибка. Имена сопоставляются с учётом регистра.", style="Small.TLabel").pack(side="right", **pad)
         ttk.Button(header, text="Инструкция", command=self._show_instruction).pack(side="right", **pad)
 
-        body = ttk.Frame(self); body.pack(fill="both", expand=True, padx=10, pady=6)
+        self._main_area = ttk.Frame(self)
+        self._main_area.pack(fill="both", expand=True, padx=10, pady=6)
+        self._main_area.columnconfigure(0, weight=1)
+        self._main_area.rowconfigure(0, weight=1)
+
+        body = ttk.Frame(self._main_area)
+        body.grid(row=0, column=0, sticky="nsew")
+
+        self._instr_frame = ttk.Frame(self._main_area, width=360)
+        self._instr_frame.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        self._instr_frame.grid_propagate(False)
+
+        instr_header = ttk.Label(self._instr_frame, text="Инструкция", style="Header.TLabel")
+        instr_header.pack(fill="x", pady=(0, 4))
+        instr_container = ttk.Frame(self._instr_frame)
+        instr_container.pack(fill="both", expand=True)
+        txt = tk.Text(instr_container, wrap="word", relief="solid", borderwidth=1)
+        scroll = ttk.Scrollbar(instr_container, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=scroll.set, state="disabled")
+        txt.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self._instr_text = txt
+        self._instr_frame.grid_remove()
 
         # What to check (split)
         box_ifc = ttk.LabelFrame(body, text="Проверки к IFC")
@@ -187,35 +212,29 @@ class App(tk.Tk):
         body.rowconfigure(8, weight=1)
 
     def _show_instruction(self):
-        """Показывает инструкцию в выезжающей панели."""
-        if self._instr_panel is not None:
-            self._instr_panel.destroy()
-            self._instr_panel = None
+        """Переключает отображение инструкции справа от основного окна."""
+        if not self._instr_frame or not self._instr_text:
             return
+
+        if self._instr_visible:
+            self._instr_frame.grid_remove()
+            self._instr_visible = False
+            return
+
         instr_path = Path(__file__).with_name("INSTRUCTION.md")
         try:
             text = instr_path.read_text(encoding="utf-8")
         except Exception:
             text = "Файл инструкции не найден."
-        panel_width = 400
-        panel = tk.Frame(self, width=panel_width, height=self.winfo_height())
-        panel.place(x=self.winfo_width(), y=0, relheight=1)
-        txt = tk.Text(panel, wrap="word")
-        scroll = ttk.Scrollbar(panel, orient="vertical", command=txt.yview)
-        txt.configure(yscrollcommand=scroll.set)
-        txt.insert("1.0", text)
-        txt.config(state="disabled")
-        txt.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        self._instr_panel = panel
 
-        def slide():
-            x = panel.winfo_x()
-            target = self.winfo_width() - panel_width
-            if x > target:
-                panel.place(x=max(x-20, target), y=0, relheight=1)
-                panel.after(10, slide)
-        slide()
+        self._instr_text.configure(state="normal")
+        self._instr_text.delete("1.0", "end")
+        self._instr_text.insert("1.0", text)
+        self._instr_text.configure(state="disabled")
+        self._instr_text.yview_moveto(0.0)
+
+        self._instr_frame.grid()
+        self._instr_visible = True
 
     def _choose_xml(self):
         p = filedialog.askopenfilename(title="Выберите XML", filetypes=[("XML","*.xml"),("Все файлы","*.*")])
