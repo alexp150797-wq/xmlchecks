@@ -57,7 +57,10 @@ def extract_from_xml(
     return a tuple ``(model_map, sign_files)`` where ``sign_files`` is a list of
     dictionaries with information about every signature file.  This keeps the
     simple dictionary return type that the public API historically exposed while
-    still allowing the CLI/GUI tools to access the additional data.
+    still allowing the CLI/GUI tools to access the additional data.  When
+    ``rules['filter_format']`` is limited to ``"PDF"`` the returned dictionary
+    (with ``include_sign_files`` left as ``False``) will also include the
+    signature file entries so that the PDF↔XML check receives the expected data.
     """
     if not xml_path.exists():
         raise FileNotFoundError(f"XML не найден: {xml_path}")
@@ -109,11 +112,32 @@ def extract_from_xml(
             s_fmt_upper = (s_fmt or "").strip().upper()
             if (not filter_set) or (s_fmt_upper in filter_set):
                 result_pdf.append({
-                    "name": s_name if case_sensitive else s_name.lower(),
+                    "name": s_name,
                     "format": s_fmt,
                     "crc_hex": s_crc,
                 })
 
     if include_sign_files:
+        if not case_sensitive:
+            for entry in result_pdf:
+                if entry.get("name"):
+                    entry["name"] = entry["name"].lower()
         return result_ifc, result_pdf
+
+    if filter_set and filter_set == {"PDF"}:
+        pdf_map: Dict[str, Dict[str, Any]] = {}
+        for key, meta in result_ifc.items():
+            pdf_map[key] = meta
+        for entry in result_pdf:
+            name = entry.get("name")
+            if not name:
+                continue
+            key = name if case_sensitive else name.lower()
+            if key not in pdf_map:
+                pdf_map[key] = {
+                    "crc_hex": entry.get("crc_hex"),
+                    "format": entry.get("format") or "PDF",
+                }
+        return pdf_map
+
     return result_ifc
