@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import List, Dict, Optional, Callable
+import os
 import re
+import sys
 
 try:
     from PyPDF2 import PdfReader  # type: ignore
@@ -29,6 +31,50 @@ DT_RE = re.compile(r"(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})")
 SIZE_RE = re.compile(r"Размер\s+файла\D*(\d+)", re.IGNORECASE)
 # Обособленное вхождение "УЛ" или "ИУЛ" (\s, _)
 IUL_KEYWORD_RE = re.compile(r"(^|[\s_])(ИУЛ|УЛ)([\s_]|$)")
+
+
+def _iter_bundle_roots() -> List[Path]:
+    roots: List[Path] = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        roots.append(Path(meipass))
+    roots.append(Path(__file__).resolve().parent.parent)
+    return roots
+
+
+def _find_embedded_tesseract_dir() -> Optional[Path]:
+    exe_name = "tesseract.exe" if os.name == "nt" else "tesseract"
+    for root in _iter_bundle_roots():
+        candidate = root / "tesseract"
+        exe_path = candidate / exe_name
+        if exe_path.exists():
+            return candidate
+    return None
+
+
+def _configure_embedded_tesseract() -> None:
+    if pytesseract is None:
+        return
+
+    current_cmd = str(getattr(pytesseract, "tesseract_cmd", "")).strip()
+    if current_cmd and Path(current_cmd).exists():
+        return
+
+    directory = _find_embedded_tesseract_dir()
+    if not directory:
+        return
+
+    exe_path = directory / ("tesseract.exe" if os.name == "nt" else "tesseract")
+    if not exe_path.exists():
+        return
+
+    pytesseract.pytesseract.tesseract_cmd = str(exe_path)
+    pytesseract.tesseract_cmd = str(exe_path)
+
+    tessdata_dir = directory / "tessdata"
+    if tessdata_dir.exists():
+        os.environ.setdefault("TESSDATA_PREFIX", str(directory))
+
 
 @dataclass
 class IulEntry:
@@ -167,3 +213,7 @@ def pdf_name_ok_strict(ifc_name: str, pdf_name: str) -> bool:
     ifc_stem = Path(ifc_name).stem.upper()
     stem = Path(pdf_name).stem.upper()
     return (ifc_stem in stem) and stem.endswith("_УЛ")
+
+
+if pytesseract is not None:
+    _configure_embedded_tesseract()

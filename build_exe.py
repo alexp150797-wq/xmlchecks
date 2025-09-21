@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 
 # Data files required at runtime
 DATA_FILES = ["rules.yaml", "INSTRUCTION.md"]
+TESSERACT_DIR = ROOT / "tesseract"
 
 
 def _build(target: str, *, windowed: bool, name: str) -> None:
@@ -40,6 +41,9 @@ def _build(target: str, *, windowed: bool, name: str) -> None:
     sep = os.pathsep  # ";" on Windows, ":" on POSIX
     for f in DATA_FILES:
         opts += ["--add-data", f"{ROOT / f}{sep}." ]
+
+    if TESSERACT_DIR.exists():
+        opts += ["--add-data", f"{TESSERACT_DIR}{sep}tesseract"]
 
     PyInstaller.__main__.run(opts)
 
