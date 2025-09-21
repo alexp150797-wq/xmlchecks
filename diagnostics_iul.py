@@ -78,13 +78,23 @@ def _check_tesseract_configuration(iul_reader: ModuleType | None) -> Path:
     if iul_reader is not None:
         module_pytesseract = getattr(iul_reader, "pytesseract", None)
         if module_pytesseract is not None:
-            configured_cmd = getattr(module_pytesseract, "tesseract_cmd", "") or ""
+            candidates = [
+                getattr(module_pytesseract, "tesseract_cmd", ""),
+                getattr(getattr(module_pytesseract, "pytesseract", None), "tesseract_cmd", ""),
+            ]
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                configured_cmd = str(candidate).strip()
+                if configured_cmd:
+                    break
             if configured_cmd:
                 print(f"pkg.iul_reader сообщает путь к tesseract: {configured_cmd}")
-            if configured_cmd and not getattr(pytesseract, "tesseract_cmd", ""):
-                setattr(pytesseract, "tesseract_cmd", configured_cmd)
+                current_cmd = str(getattr(pytesseract, "tesseract_cmd", "")).strip()
+                if not current_cmd:
+                    setattr(pytesseract, "tesseract_cmd", configured_cmd)
 
-    tesseract_cmd = getattr(pytesseract, "tesseract_cmd", "") or configured_cmd
+    tesseract_cmd = configured_cmd or str(getattr(pytesseract, "tesseract_cmd", "")).strip()
     print(f"Путь в pytesseract.tesseract_cmd: {tesseract_cmd or '(не задан)'}")
     tessdata_prefix = os.environ.get("TESSDATA_PREFIX")
     print(f"Значение переменной TESSDATA_PREFIX: {tessdata_prefix or '(не задана)'}")
@@ -186,8 +196,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(sys.version)
     print(f"Исполняемый файл Python: {sys.executable}")
 
-    _check_required_modules()
     iul_reader = _diagnose_pkg_import()
+    _check_required_modules()
     exe_path = _check_tesseract_configuration(iul_reader)
     _list_tesseract_languages(exe_path)
 
