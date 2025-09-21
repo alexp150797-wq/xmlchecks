@@ -136,6 +136,40 @@ def _normalize_text(txt: str) -> str:
     txt = txt.replace("\r", "\n")
     return "\n".join(ln.strip() for ln in txt.splitlines())
 
+
+def extract_pdf_text_debug(
+    pdf_path: Path,
+    *,
+    dpi: int = 300,
+    include_pypdf2: bool = True,
+    include_ocr: bool = True,
+) -> Dict[str, Dict[str, str]]:
+    """Возвращает тексты, полученные разными способами из PDF.
+
+    Функция предназначена для отладки OCR. Она не используется в основной
+    логике, но позволяет получить как «сырой» текст, так и нормализованный
+    вариант для каждого источника (PyPDF2 и/или OCR).
+    """
+
+    results: Dict[str, Dict[str, str]] = {}
+
+    if include_pypdf2:
+        raw_pypdf2 = _extract_text_pypdf2(pdf_path)
+        results["pypdf2"] = {
+            "raw": raw_pypdf2,
+            "normalized": _normalize_text(raw_pypdf2),
+        }
+
+    if include_ocr:
+        raw_ocr = _extract_text_ocr(pdf_path, dpi=dpi)
+        results["ocr"] = {
+            "raw": raw_ocr,
+            "normalized": _normalize_text(raw_ocr),
+        }
+
+    return results
+
+
 def _parse_entries(text: str, pdf_name: str, progress: Optional[Callable[[IulEntry], None]] = None) -> List[IulEntry]:
     lines = [ln for ln in text.splitlines() if ln]
     entries: List[IulEntry] = []

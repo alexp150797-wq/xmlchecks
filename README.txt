@@ -34,6 +34,35 @@ IFC CRC Checker — полная сборка
     # только ИУЛ↔IFC (папка с PDF, рекурсивно, строгая проверка имени PDF)
     py main_cli.py --check-iul --ifc-dir "C:\IFC" --recursive-ifc --iul-dir "C:\IUL" --recursive-pdf --pdf-name-strict --force
 
+Проверка распознавания текста в PDF (отладочный скрипт)
+------------------------------------------------------
+Скрипт `pdf_ocr_debug.py` помогает понять, распознаётся ли текст в конкретном PDF
+и нужен ли OCR. Запустите его из корня проекта и передайте один или несколько путей
+к PDF-файлам:
+
+```
+py pdf_ocr_debug.py "C:\путь\к\файлу.pdf"
+```
+
+Если Python настроен через `python`, используйте:
+
+```
+python pdf_ocr_debug.py /home/user/documents/sample.pdf
+```
+
+Можно указать несколько файлов разом:
+
+```
+python pdf_ocr_debug.py file1.pdf file2.pdf
+```
+
+Полезные опции:
+
+- `--no-pypdf2` — отключить извлечение текста через PyPDF2.
+- `--no-ocr` — отключить OCR (PyMuPDF + pytesseract).
+- `--preview-lines N` — сколько строк показать в превью (по умолчанию 40).
+- `--show-raw` — вывести «сырой» текст без нормализации.
+
 Сборка .exe (Windows, PyInstaller)
     py -m pip install -r requirements.txt -r requirements-dev.txt
     py build_exe.py
