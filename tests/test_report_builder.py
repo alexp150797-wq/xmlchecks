@@ -26,10 +26,14 @@ def test_build_report_scenarios(tmp_path):
     }
 
     rows = build_report(xml_map, [good, badcrc, name_mismatch, extra])
-    status = {row['Имя файла'] or row['Файл из XML']: row['Статус'] for row in rows}
+    status = {row['Имя файла IFC'] or row['Имя файла IFC из XML']: row['Статус'] for row in rows}
 
     assert status['good.ifc'] == 'OK'
     assert status['badcrc.ifc'] == 'CRC_MISMATCH'
     assert status['name_mismatch.ifc'] == 'NAME_MISMATCH'
     assert status['extra.ifc'] == 'ERROR_IFC_EXTRA'
     assert status['missing.ifc'] == 'ERROR_XML_EXTRA'
+
+    row_nm = next(r for r in rows if r['Имя файла IFC'] == 'name_mismatch.ifc')
+    assert row_nm['CRC-32 XML'] == crc_name
+    assert row_nm['Имя файла IFC из XML'] == 'other.ifc'

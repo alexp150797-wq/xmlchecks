@@ -18,6 +18,12 @@ IFC CRC Checker — полная сборка
 - Установите Tesseract-OCR с русским языком (rus).
 - После установки проверьте в терминале: tesseract --version
 
+Встраивание Tesseract в сборку
+- Скачайте или установите Tesseract-OCR для Windows x64 (например, сборку от проекта UB Mannheim) и убедитесь, что в ней есть `tesseract.exe`, все `.dll` и папка `tessdata` с языковыми файлами `eng` и `rus`.
+- Скопируйте всю папку установки Tesseract рядом с исходниками и переименуйте её в `tesseract` (рядом должны лежать `main_gui.py`, `build_exe.py` и т. д.). Репозиторий игнорирует эту директорию, поэтому она не попадёт в git.
+- При запуске из исходников приложение автоматически найдёт `tesseract/tesseract.exe`. Для PyInstaller-сборки `build_exe.py` добавляет папку `tesseract` в дистрибутив, так что дополнительная установка не понадобится.
+- Если требуется иной путь, можно задать его через переменную окружения `TESSDATA_PREFIX` или стандартные настройки pytesseract.
+
 Запуск GUI
     py main_gui.py
 
@@ -27,6 +33,11 @@ IFC CRC Checker — полная сборка
 
     # только ИУЛ↔IFC (папка с PDF, рекурсивно, строгая проверка имени PDF)
     py main_cli.py --check-iul --ifc-dir "C:\IFC" --recursive-ifc --iul-dir "C:\IUL" --recursive-pdf --pdf-name-strict --force
+
+Сборка .exe (Windows, PyInstaller)
+    py -m pip install -r requirements.txt -r requirements-dev.txt
+    py build_exe.py
+Экзешники появятся в папке dist/.
 
 Примечание по VS Code
 - Если запускаете через «Play», убедитесь, что рабочая директория — это папка ifc_crc_checker_mod.

@@ -75,8 +75,8 @@ def build_report_pdf_xml(xml_map: Dict[str, dict], pdf_files: List[Path], case_s
             status.append("OK")
 
         rows.append({
-            "Имя файла": base,
-            "Файл из XML": xml_name_from_xml,
+            "Имя файла IFC": base,
+            "Имя файла IFC из XML": xml_name_from_xml,
             "CRC-32 XML": ((meta_matched.get('crc_hex') or '').upper() if meta_matched else None),
             "CRC-32 PDF": actual_crc_hex,
             "Имя совпадает": tri(name_match),
@@ -91,8 +91,8 @@ def build_report_pdf_xml(xml_map: Dict[str, dict], pdf_files: List[Path], case_s
         if k in used_xml:
             continue
         rows.append({
-            "Имя файла": None,
-            "Файл из XML": name,
+            "Имя файла IFC": None,
+            "Имя файла IFC из XML": name,
             "CRC-32 XML": (meta.get("crc_hex") or "").upper() or None,
             "CRC-32 PDF": None,
             "Имя совпадает": "—",

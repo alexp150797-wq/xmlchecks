@@ -5,8 +5,8 @@ from xmlchecks.pkg.xlsx_writer_combined import write_combined_xlsx
 
 def test_combined_writer_recommendation(tmp_path):
     rows_xml = [{
-        "Имя файла": "a.ifc",
-        "Файл из XML": "a.ifc",
+        "Имя файла IFC": "a.ifc",
+        "Имя файла IFC из XML": "a.ifc",
         "CRC-32 XML": "AAAA",
         "CRC-32 IFC": "AAAA",
         "Имя совпадает": "Да",

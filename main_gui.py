@@ -9,7 +9,6 @@ from pathlib import Path
 import subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from tkinter.scrolledtext import ScrolledText
 
 from pkg.xml_reader import read_rules, extract_from_xml
 from pkg.scanner import collect_ifc_files, collect_pdf_files
@@ -18,10 +17,12 @@ from pkg.report_builder_pdf_xml import build_report_pdf_xml
 from pkg.iul_reader import extract_iul_entries, PdfReader  # type: ignore
 from pkg.report_builder_iul import build_report_iul
 from pkg.xlsx_writer_combined import write_combined_xlsx
+import socket
+import threading
 
 APP_TITLE = "IFC CRC Checker — GUI"
-# slightly wider to fit buttons and locked size
-APP_MIN_W, APP_MIN_H = 1080, 800
+# slightly wider for better layout
+APP_MIN_W, APP_MIN_H = 1160, 800
 
 EMOJI = {
     "xml": "🧾",
@@ -78,6 +79,11 @@ class App(tk.Tk):
         self.var_pdf_dir = tk.StringVar()
         self.var_recursive_pdf_other = tk.BooleanVar(value=True)
 
+        self._main_area = None
+        self._instr_frame = None
+        self._instr_text = None
+        self._instr_visible = False
+
         self._build_ui()
 
     def _apply_theme(self):
@@ -106,7 +112,29 @@ class App(tk.Tk):
         ttk.Label(header, text="Зелёный — успех, красный — ошибка. Имена сопоставляются с учётом регистра.", style="Small.TLabel").pack(side="right", **pad)
         ttk.Button(header, text="Инструкция", command=self._show_instruction).pack(side="right", **pad)
 
-        body = ttk.Frame(self); body.pack(fill="both", expand=True, padx=10, pady=6)
+        self._main_area = ttk.Frame(self)
+        self._main_area.pack(fill="both", expand=True, padx=10, pady=6)
+        self._main_area.columnconfigure(0, weight=1)
+        self._main_area.rowconfigure(0, weight=1)
+
+        body = ttk.Frame(self._main_area)
+        body.grid(row=0, column=0, sticky="nsew")
+
+        self._instr_frame = ttk.Frame(self._main_area, width=360)
+        self._instr_frame.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        self._instr_frame.grid_propagate(False)
+
+        instr_header = ttk.Label(self._instr_frame, text="Инструкция", style="Header.TLabel")
+        instr_header.pack(fill="x", pady=(0, 4))
+        instr_container = ttk.Frame(self._instr_frame)
+        instr_container.pack(fill="both", expand=True)
+        txt = tk.Text(instr_container, wrap="word", relief="solid", borderwidth=1)
+        scroll = ttk.Scrollbar(instr_container, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=scroll.set, state="disabled")
+        txt.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self._instr_text = txt
+        self._instr_frame.grid_remove()
 
         # What to check (split)
         box_ifc = ttk.LabelFrame(body, text="Проверки к IFC")
@@ -184,41 +212,29 @@ class App(tk.Tk):
         body.rowconfigure(8, weight=1)
 
     def _show_instruction(self):
-        """Показывает краткую инструкцию: окно выплывает справа и поддерживает прокрутку."""
+        """Переключает отображение инструкции справа от основного окна."""
+        if not self._instr_frame or not self._instr_text:
+            return
+
+        if self._instr_visible:
+            self._instr_frame.grid_remove()
+            self._instr_visible = False
+            return
+
         instr_path = Path(__file__).with_name("INSTRUCTION.md")
         try:
             text = instr_path.read_text(encoding="utf-8")
         except Exception:
             text = "Файл инструкции не найден."
 
-        self.update_idletasks()
-        width = 400
-        height = self.winfo_height()
-        root_x = self.winfo_rootx()
-        root_y = self.winfo_rooty()
-        start_x = root_x + self.winfo_width() + width
-        target_x = root_x + self.winfo_width()
+        self._instr_text.configure(state="normal")
+        self._instr_text.delete("1.0", "end")
+        self._instr_text.insert("1.0", text)
+        self._instr_text.configure(state="disabled")
+        self._instr_text.yview_moveto(0.0)
 
-        win = tk.Toplevel(self)
-        win.title("Инструкция")
-        win.geometry(f"{width}x{height}+{start_x}+{root_y}")
-        win.resizable(False, True)
-
-        txt = ScrolledText(win, wrap="word")
-        txt.insert("1.0", text)
-        txt.config(state="disabled")
-        txt.pack(fill="both", expand=True)
-
-        def slide():
-            nonlocal start_x
-            start_x -= 20
-            if start_x <= target_x:
-                win.geometry(f"{width}x{height}+{target_x}+{root_y}")
-            else:
-                win.geometry(f"{width}x{height}+{start_x}+{root_y}")
-                win.after(10, slide)
-
-        slide()
+        self._instr_frame.grid()
+        self._instr_visible = True
 
     def _choose_xml(self):
         p = filedialog.askopenfilename(title="Выберите XML", filetypes=[("XML","*.xml"),("Все файлы","*.*")])
@@ -430,7 +446,7 @@ class App(tk.Tk):
                     rows_xml = build_report(xml_map, files_ifc, case_sensitive=True)
                     for r in rows_xml:
                         status = r.get("Статус","")
-                        name = r.get("Имя файла")
+                        name = r.get("Имя файла IFC")
                         if status == "OK":
                             self._log(f"{EMOJI['ok']} OK(XML) — {name}", "ok")
                         else:
@@ -451,7 +467,7 @@ class App(tk.Tk):
                     rows_pdf = build_report_pdf_xml(xml_pdf_map, pdfs, case_sensitive=True)
                     for r in rows_pdf:
                         status = r.get("Статус","")
-                        name = r.get("Имя файла")
+                        name = r.get("Имя файла IFC")
                         if status == "OK":
                             self._log(f"{EMOJI['ok']} OK(PDF/XML) — {name}", "ok")
                         else:
@@ -476,12 +492,13 @@ class App(tk.Tk):
                         rows_iul = build_report_iul(
                             iul_map,
                             files_ifc,
+                            iul_pdfs,
                             strict_pdf_name=bool(self.var_pdf_name_strict.get()),
                             include_pdf_name_col=bool(self.var_pdf_name_strict.get()),
                         )
                         for r in rows_iul:
                             status = r.get("Статус","")
-                            name = r.get("Имя файла")
+                            name = r.get("Имя файла IFC")
                             if status == "OK":
                                 self._log(f"{EMOJI['ok']} OK(IUL) — {name}", "ok")
                             else:
@@ -533,5 +550,33 @@ class App(tk.Tk):
         finally:
             self.progress.stop()
 
+PORT = 65432
+
+
+def _acquire_instance(app: App) -> bool:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", PORT))
+    except OSError:
+        try:
+            with socket.create_connection(("127.0.0.1", PORT), timeout=1) as s:
+                s.send(b"show")
+        except OSError:
+            pass
+        return False
+    sock.listen(1)
+
+    def server():
+        while True:
+            conn, _ = sock.accept()
+            conn.close()
+            app.after(0, lambda: (app.deiconify(), app.lift(), app.focus_force()))
+
+    threading.Thread(target=server, daemon=True).start()
+    return True
+
+
 if __name__ == "__main__":
-    App().mainloop()
+    app = App()
+    if _acquire_instance(app):
+        app.mainloop()

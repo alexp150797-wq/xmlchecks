@@ -114,7 +114,12 @@ def main():
         if out_iul.exists() and not args.force:
             logging.error("Файл отчёта (IUL) уже существует: %s. Запустите с --force для перезаписи.", out_iul); return 2
         iul_map = extract_iul_entries(pdfs)
-        rows_iul = build_report_iul(iul_map, ifc_files, strict_pdf_name=bool(args.pdf_name_strict))
+        rows_iul = build_report_iul(
+            iul_map,
+            ifc_files,
+            pdfs,
+            strict_pdf_name=bool(args.pdf_name_strict),
+        )
         exit_iul, stats_iul = write_xlsx_iul(rows_iul, out_iul)
         logging.info("Готово (IUL). Отчёт: %s | Итоги: %s", out_iul, stats_iul)
 
