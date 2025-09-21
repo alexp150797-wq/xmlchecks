@@ -74,8 +74,8 @@ def _check_tesseract_configuration(iul_reader: ModuleType | None) -> Path:
     if pytesseract is None:
         return Path()
 
-    configured_cmd = ""
-    if iul_reader is not None:
+    configured_cmd = str(getattr(pytesseract, "tesseract_cmd", "")).strip()
+    if not configured_cmd and iul_reader is not None:
         module_pytesseract = getattr(iul_reader, "pytesseract", None)
         if module_pytesseract is not None:
             candidates = [
@@ -87,12 +87,9 @@ def _check_tesseract_configuration(iul_reader: ModuleType | None) -> Path:
                     continue
                 configured_cmd = str(candidate).strip()
                 if configured_cmd:
-                    break
-            if configured_cmd:
-                print(f"pkg.iul_reader сообщает путь к tesseract: {configured_cmd}")
-                current_cmd = str(getattr(pytesseract, "tesseract_cmd", "")).strip()
-                if not current_cmd:
                     setattr(pytesseract, "tesseract_cmd", configured_cmd)
+                    print(f"pkg.iul_reader сообщил путь к tesseract: {configured_cmd}")
+                    break
 
     tesseract_cmd = configured_cmd or str(getattr(pytesseract, "tesseract_cmd", "")).strip()
     print(f"Путь в pytesseract.tesseract_cmd: {tesseract_cmd or '(не задан)'}")
@@ -103,10 +100,12 @@ def _check_tesseract_configuration(iul_reader: ModuleType | None) -> Path:
         exe_path = Path(tesseract_cmd)
     else:
         exe_path = Path()
-    if exe_path.is_file():
+    if not tesseract_cmd:
+        print("[ВНИМАНИЕ] pytesseract.tesseract_cmd не задан. Проверьте, выполнился ли импорт pkg.iul_reader")
+    elif exe_path.is_file():
         print(f"Бинарник tesseract найден: {exe_path}")
     else:
-        print("[ВНИМАНИЕ] Бинарник tesseract по указанному пути не найден")
+        print(f"[ВНИМАНИЕ] Файл tesseract по пути {exe_path} не найден")
     return exe_path
 
 
@@ -197,9 +196,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"Исполняемый файл Python: {sys.executable}")
 
     iul_reader = _diagnose_pkg_import()
-    _check_required_modules()
+    if iul_reader is None:
+        iul_reader = _import_module("pkg.iul_reader")
+
     exe_path = _check_tesseract_configuration(iul_reader)
     _list_tesseract_languages(exe_path)
+    _check_required_modules()
 
     if pdf_path:
         _analyze_pdf(pdf_path)
