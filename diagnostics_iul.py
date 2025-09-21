@@ -179,10 +179,10 @@ def _analyze_pdf(pdf_path: Path) -> None:
         print("OCR не вернул ни одной непустой строки")
 
 
-def _parse_arguments(argv: Iterable[str]) -> Path:
+def _parse_arguments(argv: Iterable[str]) -> Optional[Path]:
     args = list(argv)
     if not args:
-        return Path()
+        return None
     return Path(args[0]).expanduser()
 
 
@@ -203,7 +203,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     _list_tesseract_languages(exe_path)
     _check_required_modules()
 
-    if pdf_path:
+    if pdf_path is not None:
         _analyze_pdf(pdf_path)
     else:
         _print_heading("Анализ PDF не выполнялся")
