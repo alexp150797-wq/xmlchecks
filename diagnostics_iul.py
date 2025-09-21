@@ -44,13 +44,47 @@ def _check_required_modules() -> None:
         _import_module(import_name)
 
 
-def _check_tesseract_configuration() -> Path:
+def _diagnose_pkg_import() -> ModuleType | None:
+    _print_heading("Проверка инициализации pkg.iul_reader")
+    try:
+        from pkg import iul_reader  # комментарий на русском языке
+    except Exception:
+        print("[ОШИБКА] Не удалось импортировать pkg.iul_reader:")
+        traceback.print_exc()
+        return None
+
+    pdf_reader_ok = getattr(iul_reader, "PdfReader", None) is not None
+    fitz_ok = getattr(iul_reader, "fitz", None) is not None
+    pytesseract_ok = getattr(iul_reader, "pytesseract", None) is not None
+    image_ok = getattr(iul_reader, "Image", None) is not None
+
+    print(f"PdfReader доступен: {pdf_reader_ok}")
+    print(f"PyMuPDF (fitz) доступен: {fitz_ok}")
+    print(f"pytesseract доступен: {pytesseract_ok}")
+    print(f"Pillow.Image доступен: {image_ok}")
+    tesseract_cmd = getattr(iul_reader.pytesseract, "tesseract_cmd", "") if pytesseract_ok else ""
+    print(f"Путь, который использует модуль, {tesseract_cmd or '(не задан)'}")
+
+    return iul_reader
+
+
+def _check_tesseract_configuration(iul_reader: ModuleType | None) -> Path:
     _print_heading("Проверка настроек Tesseract")
     pytesseract = _import_module("pytesseract")
     if pytesseract is None:
         return Path()
 
-    tesseract_cmd = getattr(pytesseract, "tesseract_cmd", "")
+    configured_cmd = ""
+    if iul_reader is not None:
+        module_pytesseract = getattr(iul_reader, "pytesseract", None)
+        if module_pytesseract is not None:
+            configured_cmd = getattr(module_pytesseract, "tesseract_cmd", "") or ""
+            if configured_cmd:
+                print(f"pkg.iul_reader сообщает путь к tesseract: {configured_cmd}")
+            if configured_cmd and not getattr(pytesseract, "tesseract_cmd", ""):
+                setattr(pytesseract, "tesseract_cmd", configured_cmd)
+
+    tesseract_cmd = getattr(pytesseract, "tesseract_cmd", "") or configured_cmd
     print(f"Путь в pytesseract.tesseract_cmd: {tesseract_cmd or '(не задан)'}")
     tessdata_prefix = os.environ.get("TESSDATA_PREFIX")
     print(f"Значение переменной TESSDATA_PREFIX: {tessdata_prefix or '(не задана)'}")
@@ -71,6 +105,7 @@ def _list_tesseract_languages(exe_path: Path) -> None:
     if not exe_path.is_file():
         print("[ВНИМАНИЕ] Путь к tesseract не задан, пропускаем проверку языков")
         return
+    print(f"Используем бинарник tesseract: {exe_path}")
     try:
         result = subprocess.run(
             [str(exe_path), "--list-langs"],
@@ -86,28 +121,6 @@ def _list_tesseract_languages(exe_path: Path) -> None:
         print("Доступные языки:\n" + result.stdout.strip())
     if result.stderr.strip():
         print("Сообщения об ошибках:\n" + result.stderr.strip())
-
-
-def _diagnose_pkg_import() -> None:
-    _print_heading("Проверка инициализации pkg.iul_reader")
-    try:
-        from pkg import iul_reader  # комментарий на русском языке
-    except Exception:
-        print("[ОШИБКА] Не удалось импортировать pkg.iul_reader:")
-        traceback.print_exc()
-        return
-
-    pdf_reader_ok = getattr(iul_reader, "PdfReader", None) is not None
-    fitz_ok = getattr(iul_reader, "fitz", None) is not None
-    pytesseract_ok = getattr(iul_reader, "pytesseract", None) is not None
-    image_ok = getattr(iul_reader, "Image", None) is not None
-
-    print(f"PdfReader доступен: {pdf_reader_ok}")
-    print(f"PyMuPDF (fitz) доступен: {fitz_ok}")
-    print(f"pytesseract доступен: {pytesseract_ok}")
-    print(f"Pillow.Image доступен: {image_ok}")
-    tesseract_cmd = getattr(iul_reader.pytesseract, "tesseract_cmd", "") if pytesseract_ok else ""
-    print(f"Путь, который использует модуль, {tesseract_cmd or '(не задан)'}")
 
 
 def _read_text_preview(text: str, max_lines: int = 10) -> str:
@@ -174,9 +187,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"Исполняемый файл Python: {sys.executable}")
 
     _check_required_modules()
-    exe_path = _check_tesseract_configuration()
+    iul_reader = _diagnose_pkg_import()
+    exe_path = _check_tesseract_configuration(iul_reader)
     _list_tesseract_languages(exe_path)
-    _diagnose_pkg_import()
 
     if pdf_path:
         _analyze_pdf(pdf_path)
